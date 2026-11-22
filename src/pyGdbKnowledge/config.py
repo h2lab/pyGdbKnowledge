@@ -73,6 +73,14 @@ class IngestionSettings(_Section):
 
     max_pages: int = Field(default=5000, ge=1)
     max_chars: int = Field(default=40_000_000, ge=1000)
+    chunk_max_chars: int = Field(default=1500, ge=200, le=8000)
+    chunk_overlap_chars: int = Field(default=150, ge=0)
+
+    @model_validator(mode="after")
+    def _overlap_below_half(self) -> Self:
+        if self.chunk_overlap_chars * 2 > self.chunk_max_chars:
+            raise ValueError("chunk_overlap_chars must not exceed half of chunk_max_chars")
+        return self
 
 
 class LimitSettings(_Section):

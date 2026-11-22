@@ -253,3 +253,12 @@ def test_cli_sync(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         ["sync", "--manifest", str(manifest), "--config", str(config), "--source", "nope"]
     )
     assert cli._sync(unknown, env.fetcher) == 1  # noqa: SLF001
+
+
+def test_include_patterns_restrict_the_svd_files(tmp_path: Path) -> None:
+    """Only files whose name matches an include pattern are planned."""
+    env = scenario(tmp_path)
+    source = env.manifest.sources[0].model_copy(update={"include": ("stm32a*",)})
+    narrowed = env.manifest.model_copy(update={"sources": (source,)})
+    plans = plan_sync(narrowed, env.fetcher, 10_000_000)
+    assert [p.metadata.device for p in plans] == ["STM32A"]

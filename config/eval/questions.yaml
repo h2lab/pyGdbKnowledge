@@ -1,0 +1,133 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+# Pilot evaluation questions for `pyGdbKnowledge evaluate`.
+# Each question lists the evidence a correct answer needs; `document` is matched against the
+# document id, title and device, `contains` against the chunk text (case-insensitive).
+# Categories: register, bitfield, address, dma, timing, hardware, cross.
+# Gap: no errata sheet in the pilot corpus yet (add ST errata URLs to corpus.yaml first).
+
+questions:
+  # --- registers and addresses (SVD) ---
+  - id: f407-usart1-cr1
+    category: register
+    query: USART1 control register 1 address STM32F407
+    filters: {device: STM32F407}
+    expect: [{peripheral: USART1, contains: ["USART1_CR1", "0x4001100C"]}]
+  - id: f407-gpioa-moder
+    category: address
+    query: GPIOA MODER port mode register address
+    filters: {device: STM32F407}
+    expect: [{peripheral: GPIOA, contains: ["GPIOA_MODER", "0x40020000"]}]
+  - id: f407-rcc-ahb1enr
+    category: register
+    query: RCC AHB1 peripheral clock enable register
+    filters: {device: STM32F407}
+    expect: [{peripheral: RCC, contains: ["RCC_AHB1ENR"]}]
+  - id: f407-flash-latency
+    category: bitfield
+    query: FLASH_ACR LATENCY wait states bits
+    filters: {device: STM32F407}
+    expect: [{peripheral: FLASH, contains: ["FLASH_ACR", "LATENCY"]}]
+  - id: f429-sdram
+    category: register
+    query: FMC SDRAM control register SDCR
+    filters: {device: STM32F429}
+    expect: [{contains: ["SDCR"], section: FMC}]
+  - id: u595-icache-cr
+    category: bitfield
+    query: ICACHE control register enable bit
+    filters: {device: STM32U595}
+    expect: [{peripheral: ICACHE, contains: ["ICACHE_CR", "EN"]}]
+  - id: u595-usart1-cr1
+    category: register
+    query: USART1 CR1 FIFO enable FIFOEN
+    filters: {device: STM32U595}
+    expect: [{peripheral: USART1, contains: ["USART1_CR1", "FIFOEN"]}]
+  - id: u5a5-rcc-ccipr
+    category: register
+    query: RCC peripherals independent clock configuration register
+    filters: {device: STM32U5A5}
+    expect: [{peripheral: RCC, contains: ["CCIPR"]}]
+  - id: u5a9-ltdc
+    category: register
+    query: LTDC layer 1 window horizontal position configuration register
+    filters: {device: STM32U5A9}
+    expect: [{peripheral: LTDC, contains: ["L1WHPCR"]}]
+  - id: f446-i2c-cr1
+    category: bitfield
+    query: I2C1 CR1 software reset SWRST bit
+    filters: {device: STM32F446}
+    expect: [{peripheral: I2C1, contains: ["SWRST"]}]
+
+  # --- DMA ---
+  - id: f407-dma2-s0cr
+    category: dma
+    query: DMA2 stream 0 configuration register channel selection CHSEL
+    filters: {device: STM32F407}
+    expect: [{peripheral: DMA2, contains: ["DMA2_S0CR", "CHSEL"]}]
+  - id: f407-dma-fifo
+    category: dma
+    query: DMA stream x FIFO control register FEIE direct mode error
+    filters: {device: STM32F407}
+    expect: [{peripheral: DMA1, contains: ["S0FCR"]}, {peripheral: DMA2, contains: ["S0FCR"]}]
+  - id: u595-gpdma-ccr
+    category: dma
+    query: GPDMA1 channel control register
+    filters: {device: STM32U595}
+    expect: [{peripheral: GPDMA1}]
+  - id: f4-datasheet-dma
+    category: dma
+    query: number of DMA streams and FIFOs
+    expect: [{document: 407xx-datasheet, contains: ["stream"]}]
+
+  # --- timing and electrical characteristics (datasheets) ---
+  - id: f407-max-freq
+    category: timing
+    query: maximum CPU frequency 168 MHz
+    expect: [{document: 407xx-datasheet, contains: ["168 MHz"]}]
+  - id: u595-max-freq
+    category: timing
+    query: maximum frequency of the Cortex-M33 160 MHz
+    expect: [{document: u595xx-datasheet, contains: ["160 MHz"]}]
+  - id: n657-core
+    category: timing
+    query: STM32N657 Arm Cortex-M55 core maximum frequency
+    expect: [{document: n657x0-datasheet, contains: ["Cortex-M55"]}]
+  - id: f4-supply-range
+    category: timing
+    query: application supply voltage VDD range 1.8 V to 3.6 V
+    expect: [{document: 407xx-datasheet, contains: ["1.8"]}]
+  - id: u5-supply-range
+    category: timing
+    query: VDD operating voltage range 1.71 V to 3.6 V
+    expect: [{document: u595xx-datasheet, contains: ["1.71"]}]
+  - id: u5a5-gpu
+    category: hardware
+    query: Neo-Chrom graphic accelerator GPU2D features
+    expect: [{document: u5a5xx, contains: ["Chrom"]}]
+
+  # --- hardware design (application notes) ---
+  - id: an4488-vcap
+    category: hardware
+    query: VCAP pins external capacitor regulator STM32F4
+    expect: [{document: an4488, contains: ["VCAP"]}]
+  - id: an4488-boot0
+    category: hardware
+    query: BOOT0 pin boot mode selection
+    expect: [{document: an4488, contains: ["BOOT0"]}]
+  - id: an5373-smps
+    category: hardware
+    query: STM32U5 SMPS step-down converter external components
+    expect: [{document: an5373, contains: ["SMPS"]}]
+  - id: an5373-hse
+    category: hardware
+    query: HSE crystal oscillator load capacitors layout
+    filters: {device_family: STM32U5}
+    expect: [{document: an5373, contains: ["HSE"]}]
+
+  # --- cross-corpus ---
+  - id: cross-u5-rcc
+    category: cross
+    query: how to enable the USART1 peripheral clock on STM32U5
+    expect: [{peripheral: RCC, document: u5}, {document: u595xx-datasheet}]

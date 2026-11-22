@@ -50,6 +50,9 @@ class UrlSource(_Model):
 class GithubSvdSource(_Model):
     """SVD files of a GitHub repository laid out as ``<prefix>/<Vendor>/<device>.svd``.
 
+    ``include`` optionally restricts the files to these patterns (``fnmatch``, case-insensitive,
+    matched on the file name without extension); empty means every file of the vendors.
+
     ``ref`` should be a full commit hash: the files are then immutable and reproducible. A
     branch name is resolved to its current commit at each sync.
     """
@@ -61,6 +64,7 @@ class GithubSvdSource(_Model):
     ref: str = Field(default="main", pattern=r"^[A-Za-z0-9_./-]{1,100}$")
     path_prefix: str = Field(default="data", pattern=r"^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$")
     vendors: tuple[str, ...] = Field(min_length=1)
+    include: tuple[str, ...] = ()
     manufacturers: dict[str, str] = Field(default_factory=dict)
 
 

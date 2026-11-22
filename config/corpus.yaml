@@ -21,10 +21,11 @@ sources:
     repo: cmsis-svd/cmsis-svd-data
     ref: c65f8551e57c770344d229dcaa0bf838fa29aff4
     path_prefix: data
-    vendors: [STMicro, Nordic, NXP]
+    vendors: [STMicro]
+    # Pilot scope; remove `include` (and add Nordic, NXP, ...) to widen the corpus.
+    include: [STM32F4*, STM32U5*, STM32N6*]
     manufacturers:
       STMicro: STMicroelectronics
-      Nordic: Nordic Semiconductor
 
   # ST documents (datasheets, reference manuals, application notes, errata, ...): list each
   # one explicitly. Take the URL from the document page on www.st.com; add `sha256` to pin it.
@@ -37,3 +38,32 @@ sources:
         title: STM32U595xx datasheet
         device_family: STM32U5
         document_type: datasheet
+      # One datasheet covers both STM32U5A5xx and STM32U5A9xx (same file behind both URLs).
+      - url: https://www.st.com/resource/en/datasheet/stm32u5a5zj.pdf
+        title: STM32U5A5xx/U5A9xx datasheet
+        device_family: STM32U5
+        device: STM32U5A5
+        document_type: datasheet
+      - url: https://www.st.com/resource/en/application_note/an5373-getting-started-with-stm32u5-mcu-hardware-development-stmicroelectronics.pdf
+        title: AN5373 Getting started with STM32U5 MCU hardware development
+        device_family: STM32U5
+        document_type: application_note
+      - url: https://www.st.com/resource/en/datasheet/stm32n657x0.pdf
+        title: STM32N657x0 datasheet
+        device_family: STM32N6
+        device: STM32N657
+        document_type: datasheet
+      - url: https://www.st.com/resource/en/datasheet/stm32f407vg.pdf
+        title: STM32F405xx/407xx datasheet
+        device_family: STM32F4
+        device: STM32F407
+        document_type: datasheet
+      - url: https://www.st.com/resource/en/datasheet/stm32f429zi.pdf
+        title: STM32F427xx/429xx datasheet
+        device_family: STM32F4
+        device: STM32F429
+        document_type: datasheet
+      - url: https://www.st.com/resource/en/application_note/an4488-getting-started-with-stm32f4xxxx-mcu-hardware-development-stmicroelectronics.pdf
+        title: AN4488 Getting started with STM32F4xxxx MCU hardware development
+        device_family: STM32F4
+        document_type: application_note

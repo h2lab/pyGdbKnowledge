@@ -14,10 +14,12 @@ from .config import ConfigError, Settings, load_settings
 from .corpus.fetch import Fetcher, HttpFetcher
 from .corpus.manifest import CorpusError, load_manifest
 from .corpus.sync import LockFile, plan_sync, run_sync
+from .evaluation import EvaluationError, evaluate, load_questions
 from .ingestion.importer import DocumentMetadata, IngestError, import_document
 from .ingestion.pipeline import BatchReport, Indexer, IndexingError
 from .main import configure_logging, create_app
 from .retrieval.embeddings import EmbeddingError
+from .retrieval.hybrid import HybridSearcher
 from .retrieval.vector_store import VectorStoreError
 from .services import build_vector_components
 from .storage.catalog import Catalog, CatalogError
@@ -87,6 +89,13 @@ def _parser() -> argparse.ArgumentParser:
     sync.add_argument("--limit", type=int, help="stop after this many downloads")
     sync.add_argument("--index", action="store_true", help="index the imported documents")
     sync.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    evaluation = commands.add_parser(
+        "evaluate", help="measure retrieval quality (Recall@k, MRR) on a question file"
+    )
+    evaluation.add_argument("questions", type=Path, metavar="QUESTIONS_YAML")
+    evaluation.add_argument("--min-recall", type=float, help="exit 1 below this Recall@5 (0-1)")
+    evaluation.add_argument("--verbose", action="store_true", help="list every question")
+    evaluation.add_argument("--config", type=Path, help=_CONFIG_HELP)
     return parser
 
 
@@ -265,6 +274,33 @@ def _sync(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     return 1 if failures else 0
 
 
+def _evaluate(args: argparse.Namespace) -> int:
+    opened = _open(args.config)
+    if opened is None:
+        return 1
+    settings, _, catalog = opened
+    try:
+        questions = load_questions(args.questions)
+        components = build_vector_components(settings)
+    except (EvaluationError, EmbeddingError, VectorStoreError) as exc:
+        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        return 1
+    embedder, store = components if components else (None, None)
+    report = evaluate(HybridSearcher(catalog, embedder, store), questions)
+    for result in report.results:
+        if args.verbose or result.rank is None:
+            rank = result.rank or "miss"
+            print(f"{result.question.id:<24} {result.question.category:<12} rank={rank}")
+    for category in [None, *report.categories]:
+        label = category or "all"
+        recalls = " ".join(f"R@{k}={report.recall(k, category):.2f}" for k in report.ks)
+        print(f"{label:<12} {recalls}")
+    print(f"questions={len(report.results)} MRR={report.mrr:.3f}")
+    if args.min_recall is not None and report.recall(5) < args.min_recall:
+        return 1
+    return 0
+
+
 def _serve(config: Path | None) -> int:
     try:
         settings = load_settings(config)
@@ -310,6 +346,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _release(args)
     if args.command == "audit":
         return _audit(args)
+    if args.command == "evaluate":
+        return _evaluate(args)
     if args.command == "sync":
         return _sync(args)
     raise AssertionError(f"unhandled command {args.command!r}")

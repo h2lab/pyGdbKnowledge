@@ -100,6 +100,8 @@ Workspace layout:
 
 - [ ] **20. Pilot corpus and evaluation**: 10-30 documents, questions (register, bit field,
   timing, errata, DMA), page/section verification, Recall@k, chunking/scoring tuning.
+  Started: pilot corpus (21 STM32 F4/U5 SVD files, 8 ST PDFs), `config/eval/questions.yaml`,
+  `pyGdbKnowledge evaluate` (Recall@k, MRR). Remaining: errata, embeddings run, tuning.
 - [ ] **21. Docker and Compose**: `Dockerfile` (non-root user, read-only filesystem outside
   workspace/tmp), `docker-compose.yml` with Qdrant, workspace volume, `.env.example`,
   healthchecks.

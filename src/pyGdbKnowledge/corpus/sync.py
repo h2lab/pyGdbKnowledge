@@ -9,6 +9,7 @@ first download (trust on first use), before it is handed to the regular import p
 """
 
 import json
+import fnmatch
 import logging
 import os
 import re
@@ -127,6 +128,10 @@ def _expand_github(
             logger.warning("%s: %s exceeds the size limit, ignored", source.name, path)
             continue
         stem = parts[-1][: -len(".svd")]
+        if source.include and not any(
+            fnmatch.fnmatch(stem.lower(), pattern.lower()) for pattern in source.include
+        ):
+            continue
         manufacturer = source.manufacturers.get(vendor, vendor)
         url = f"https://{GITHUB_RAW_HOST}/{source.repo}/{sha}/{quote(path)}"
         plans.append(

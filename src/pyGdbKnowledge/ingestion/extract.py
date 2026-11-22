@@ -16,7 +16,7 @@ from typing import Any
 
 from ..config import IngestionSettings
 
-_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_CONTROL_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u2060-\u2064\ufeff]")
 _BLANKS_RE = re.compile(r"\n{3,}")
 _DIGITS_RE = re.compile(r"\d+")
 _CAPTION_RE = re.compile(r"^(table|figure)\s+\d+[.:]", re.IGNORECASE)

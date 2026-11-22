@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    AuditEvent,
     CatalogStats,
     Chunk,
     Document,
@@ -93,6 +94,21 @@ _MIGRATIONS: tuple[str, ...] = (
         INSERT INTO chunks_fts (rowid, text, section_path, peripheral)
         VALUES (new.rowid, new.text, new.section_path, new.peripheral);
     END;
+    """,
+    """
+    CREATE TABLE audit_events (
+        event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        occurred_at TEXT NOT NULL,
+        event TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        content_hash TEXT,
+        source_type TEXT,
+        source_url TEXT,
+        revision TEXT,
+        channel TEXT,
+        detail TEXT
+    );
+    CREATE INDEX audit_events_document ON audit_events (document_id, event_id);
     """,
 )
 
@@ -285,6 +301,62 @@ class Catalog:
                 (limit, offset),
             ).fetchall()
         return [_document(row) for row in rows]
+
+    def set_status(self, document_id: str, status: DocumentStatus) -> bool:
+        """Change the lifecycle status of a document; return False if it is unknown."""
+        with self._connect() as db:
+            return (
+                db.execute(
+                    "UPDATE documents SET status = ? WHERE document_id = ?",
+                    (status.value, document_id),
+                ).rowcount
+                == 1
+            )
+
+    def record_event(
+        self,
+        event: str,
+        document_id: str,
+        *,
+        content_hash: str | None = None,
+        source_type: str | None = None,
+        source_url: str | None = None,
+        revision: str | None = None,
+        channel: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        """Append a lifecycle event to the audit trail (never holds document content)."""
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO audit_events (occurred_at, event, document_id, content_hash,"
+                " source_type, source_url, revision, channel, detail)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    datetime.now(UTC).isoformat(),
+                    event,
+                    document_id,
+                    content_hash,
+                    source_type,
+                    source_url,
+                    revision,
+                    channel,
+                    detail,
+                ),
+            )
+
+    def list_events(self, document_id: str | None = None, limit: int = 100) -> list[AuditEvent]:
+        """Return the most recent audit events, oldest first, optionally for one document."""
+        query = "SELECT * FROM audit_events"
+        params: tuple[Any, ...] = ()
+        if document_id is not None:
+            query += " WHERE document_id = ?"
+            params = (document_id,)
+        with self._connect() as db:
+            rows = db.execute(
+                f"SELECT * FROM ({query} ORDER BY event_id DESC LIMIT ?) ORDER BY event_id",
+                (*params, limit),
+            ).fetchall()
+        return [AuditEvent(**dict(row)) for row in rows]
 
     def delete_document(self, document_id: str) -> bool:
         """Delete a document with its sections, chunks and FTS entries.

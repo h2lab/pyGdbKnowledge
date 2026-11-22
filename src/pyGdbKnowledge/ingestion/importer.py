@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from ..storage.catalog import Catalog, DuplicateDocumentError
 from ..storage.models import Document, DocumentStatus, SourceType
 from ..workspace import Area, Workspace
+from .screening import screen_metadata
 
 PDF_MAGIC = b"%PDF-"
 _MAGIC_WINDOW = 1024
@@ -71,6 +72,7 @@ def import_pdf(
     source: Path,
     metadata: DocumentMetadata,
     max_bytes: int,
+    channel: str = "cli",
 ) -> ImportResult:
     """Copy a PDF into the workspace and register it in the catalog.
 
@@ -90,6 +92,8 @@ def import_pdf(
         Operator-supplied provenance and classification.
     max_bytes : int
         Maximum accepted file size.
+    channel : str
+        Import channel recorded in the audit trail (for example ``cli`` or ``upload``).
 
     Returns
     -------
@@ -102,6 +106,19 @@ def import_pdf(
         If the source is not a regular PDF within the size limit, or the metadata is invalid.
     """
     _check_source_url(metadata.source_url)
+    suspicious = screen_metadata(
+        (
+            metadata.title,
+            source.stem,
+            metadata.manufacturer,
+            metadata.device_family,
+            metadata.device,
+            metadata.document_type,
+            metadata.revision,
+        )
+    )
+    if suspicious:
+        raise IngestError(f"suspicious metadata or file name ({', '.join(suspicious)})")
     try:
         info = source.stat()
     except OSError as exc:
@@ -165,6 +182,15 @@ def import_pdf(
         except Exception:
             target.unlink(missing_ok=True)
             raise
+        catalog.record_event(
+            "imported",
+            stored.document_id,
+            content_hash=sha256,
+            source_type=stored.source_type.value,
+            source_url=stored.source_url,
+            revision=stored.revision,
+            channel=channel,
+        )
         return ImportResult(stored, created=True)
     finally:
         tmp_path.unlink(missing_ok=True)

@@ -118,3 +118,20 @@ def test_failed_indexing_is_reported(client: TestClient, tmp_path: Path) -> None
 def test_unknown_task(client: TestClient) -> None:
     """Unknown task ids answer 404."""
     assert client.get("/api/v1/admin/tasks/" + "0" * 32, headers=ADMIN).status_code == 404
+
+
+def test_delete_endpoint_removes_document(client: TestClient, tmp_path: Path) -> None:
+    """DELETE removes the document so that it is no longer searchable or readable."""
+    created = client.post(
+        "/api/v1/admin/ingest", params=QUERY, content=_pdf_bytes(tmp_path), headers=ADMIN
+    ).json()
+    _wait(client, created["task"]["task_id"])
+    url = f"/api/v1/admin/documents/{created['document_id']}"
+    assert client.delete(url, headers=READ).status_code == 401
+    assert client.delete(url, headers=ADMIN).status_code == 204
+    assert client.delete(url, headers=ADMIN).status_code == 404
+    found = client.post("/api/v1/search", json={"query": "USART_ISR"}, headers=READ)
+    assert found.json()["results"] == []
+    assert (
+        client.get(f"/api/v1/documents/{created['document_id']}", headers=READ).status_code == 404
+    )

@@ -16,10 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import Settings
 from ..ingestion.importer import DocumentMetadata, ImportResult, IngestError, import_pdf
+from ..ingestion.pipeline import Indexer, IndexingError
 from ..ingestion.tasks import TaskInfo, TaskRegistry
 from ..security import audit_logger
 from ..storage.catalog import Catalog, CatalogError
-from ..storage.models import SourceType
+from ..storage.models import ID_PATTERN, SourceType
 from ..workspace import Area, Workspace
 from .deps import get_catalog, get_settings
 
@@ -100,10 +101,11 @@ async def _import(
     source: Path,
     metadata: ImportMetadata,
     max_bytes: int,
+    channel: str,
 ) -> ImportResult:
     try:
         return await run_in_threadpool(
-            import_pdf, workspace, catalog, source, metadata.to_metadata(), max_bytes
+            import_pdf, workspace, catalog, source, metadata.to_metadata(), max_bytes, channel
         )
     except IngestError as exc:
         logger.warning("import rejected: %s", exc)
@@ -142,7 +144,7 @@ async def ingest_upload(
                 out.write(block)
         if total == 0:
             raise HTTPException(status_code=422, detail="empty upload")
-        result = await _import(workspace, catalog, tmp, metadata, limit)
+        result = await _import(workspace, catalog, tmp, metadata, limit, "upload")
     finally:
         tmp.unlink(missing_ok=True)
     return _finish(request, "upload", result)
@@ -169,9 +171,25 @@ async def ingest_path(
         raise HTTPException(status_code=403, detail="path not allowed")
     metadata = ImportMetadata.model_validate(body.model_dump(exclude={"path"}))
     result = await _import(
-        _workspace(request), catalog, source, metadata, settings.limits.max_upload_bytes
+        _workspace(request), catalog, source, metadata, settings.limits.max_upload_bytes, "path"
     )
     return _finish(request, "path", result)
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+def delete_document(
+    request: Request,
+    document_id: Annotated[str, PathParam(pattern=ID_PATTERN)],
+) -> None:
+    """Remove a document with its file, passages and vectors."""
+    indexer: Indexer = request.app.state.indexer
+    try:
+        removed = indexer.delete_document(document_id)
+    except IndexingError as exc:
+        logger.error("deletion failed: %s", exc)
+        raise HTTPException(status_code=500, detail="deletion failed") from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail="document not found")
 
 
 @router.get("/tasks/{task_id}", response_model=TaskInfo)

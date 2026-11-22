@@ -105,6 +105,21 @@ class SearchHit(_Model):
     score: float
 
 
+class AuditEvent(_Model):
+    """One lifecycle event of a document (ANSSI R26); kept after the document is deleted."""
+
+    event_id: int
+    occurred_at: datetime
+    event: str
+    document_id: str
+    content_hash: str | None = None
+    source_type: str | None = None
+    source_url: str | None = None
+    revision: str | None = None
+    channel: str | None = None
+    detail: str | None = None
+
+
 class CatalogStats(_Model):
     """Catalog counters."""
 

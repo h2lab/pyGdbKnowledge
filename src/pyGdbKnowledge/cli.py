@@ -56,10 +56,24 @@ def _parser() -> argparse.ArgumentParser:
         indexing = commands.add_parser(name, help=help_text)
         indexing.add_argument("documents", nargs="*", metavar="DOCUMENT_ID")
         indexing.add_argument("--config", type=Path, help=_CONFIG_HELP)
-    delete = commands.add_parser("delete", help="remove a document and everything derived from it")
-    delete.add_argument("document", metavar="DOCUMENT_ID")
+    delete = commands.add_parser(
+        "delete", help="remove documents and everything derived from them (files, index, vectors)"
+    )
+    delete.add_argument("documents", nargs="*", metavar="DOCUMENT_ID")
+    delete.add_argument(
+        "--source-url-prefix", help="also remove every document whose source URL starts with this"
+    )
     delete.add_argument("--keep-file", action="store_true", help="keep the PDF in the workspace")
     delete.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    release = commands.add_parser(
+        "release", help="release a quarantined document after review, then index it"
+    )
+    release.add_argument("document", metavar="DOCUMENT_ID")
+    release.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    audit = commands.add_parser("audit", help="print the document lifecycle audit trail")
+    audit.add_argument("document", nargs="?", metavar="DOCUMENT_ID")
+    audit.add_argument("--limit", type=int, default=100)
+    audit.add_argument("--config", type=Path, help=_CONFIG_HELP)
     return parser
 
 
@@ -105,6 +119,28 @@ def _index(args: argparse.Namespace, *, rebuild: bool) -> int:
 
 
 def _delete(args: argparse.Namespace) -> int:
+    if not args.documents and not args.source_url_prefix:
+        print("pyGdbKnowledge: give document ids or --source-url-prefix", file=sys.stderr)
+        return 2
+    opened = _open(args.config)
+    if opened is None:
+        return 1
+    indexer = _indexer(*opened)
+    if indexer is None:
+        return 1
+    targets = list(args.documents)
+    if args.source_url_prefix:
+        targets += indexer.find_by_source_url(args.source_url_prefix)
+    report = indexer.delete_documents(targets, keep_file=args.keep_file)
+    for document_id in dict.fromkeys(targets):
+        if document_id not in report.failed:
+            print(f"deleted: {document_id}")
+    for document_id, message in report.failed.items():
+        print(f"pyGdbKnowledge: {document_id}: {message}", file=sys.stderr)
+    return 1 if report.failed else 0
+
+
+def _release(args: argparse.Namespace) -> int:
     opened = _open(args.config)
     if opened is None:
         return 1
@@ -112,14 +148,24 @@ def _delete(args: argparse.Namespace) -> int:
     if indexer is None:
         return 1
     try:
-        removed = indexer.delete_document(args.document, keep_file=args.keep_file)
+        result = indexer.release(args.document)
     except IndexingError as exc:
         print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
         return 1
-    if not removed:
-        print(f"pyGdbKnowledge: unknown document {args.document!r}", file=sys.stderr)
+    print(f"released: {result.document_id} ({result.chunks} chunks)")
+    return 0
+
+
+def _audit(args: argparse.Namespace) -> int:
+    opened = _open(args.config)
+    if opened is None:
         return 1
-    print(f"deleted: {args.document}")
+    for event in opened[2].list_events(args.document, args.limit):
+        print(
+            f"{event.occurred_at.isoformat()} {event.event} {event.document_id}"
+            f" sha256={event.content_hash or '-'} channel={event.channel or '-'}"
+            f" {event.detail or ''}".rstrip()
+        )
     return 0
 
 
@@ -204,4 +250,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _index(args, rebuild=args.command == "reindex")
     if args.command == "delete":
         return _delete(args)
+    if args.command == "release":
+        return _release(args)
+    if args.command == "audit":
+        return _audit(args)
     raise AssertionError(f"unhandled command {args.command!r}")

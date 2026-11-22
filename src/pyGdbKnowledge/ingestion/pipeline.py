@@ -20,6 +20,7 @@ from ..workspace import Area, Workspace, WorkspaceError
 from .chunking import chunk_document
 from .extract import ExtractedDocument, ExtractionError, extract_pdf
 from .ocr import OcrError, needs_ocr, ocr_pdf
+from .screening import screen_chunks
 
 logger = logging.getLogger("pyGdbKnowledge")
 
@@ -86,13 +87,16 @@ class Indexer:
         """Whether vectors are produced."""
         return self._embedder is not None and self._vector_store is not None
 
-    def index_document(self, document_id: str) -> IndexResult:
+    def index_document(self, document_id: str, *, screen: bool = True) -> IndexResult:
         """(Re)build the index of one document from its stored PDF.
 
         Parameters
         ----------
         document_id : str
             Catalog identifier.
+        screen : bool
+            Screen the content for prompt-injection signals and quarantine the document on a
+            hit; disabled only when a reviewer releases a document.
 
         Returns
         -------
@@ -102,8 +106,8 @@ class Indexer:
         Raises
         ------
         IndexingError
-            If the document is unknown, not active, missing on disk, unreadable, or if
-            embedding or vector storage fails.
+            If the document is unknown, not active, quarantined by the screening, missing on
+            disk, unreadable, or if embedding or vector storage fails.
         """
         document = self._catalog.get_document(document_id)
         if document is None:
@@ -120,6 +124,14 @@ class Indexer:
         chunked = chunk_document(document_id, extracted, self._settings.ingestion)
         if not chunked.chunks:
             raise IndexingError(f"no extractable text in {document_id!r} (scanned? enable OCR)")
+        if screen and self._settings.ingestion.quarantine_suspicious:
+            findings = screen_chunks(chunked.chunks)
+            if findings:
+                rules = sorted({finding.rule for finding in findings})
+                self._quarantine(document, f"rules={','.join(rules)} hits={len(findings)}")
+                raise IndexingError(
+                    f"document {document_id!r} quarantined for review ({', '.join(rules)})"
+                )
         vectors = self._embed(document, chunked.chunks)
 
         try:
@@ -136,6 +148,14 @@ class Indexer:
                     f"lexical index of {document_id!r} is ready but vectors failed "
                     f"(run reindex): {exc}"
                 ) from exc
+        self._catalog.record_event(
+            "indexed",
+            document_id,
+            content_hash=document.content_hash,
+            source_type=document.source_type.value,
+            detail=f"sections={len(chunked.sections)} chunks={len(chunked.chunks)} "
+            f"vectors={len(vectors)}",
+        )
         audit_logger.info(
             "event=index document_id=%s sha256=%s sections=%d chunks=%d vectors=%d",
             document_id,
@@ -253,10 +273,21 @@ class Indexer:
                 raise IndexingError(f"cannot delete vectors of {document_id!r}: {exc}") from exc
         self._catalog.delete_document(document_id)
         if not keep_file:
-            try:
-                self._workspace.document_path(document.content_hash).unlink(missing_ok=True)
-            except (WorkspaceError, OSError) as exc:
-                logger.warning("cannot remove the PDF of %s: %s", document_id, exc)
+            for area in (Area.DOCUMENTS, Area.QUARANTINE):
+                try:
+                    self._workspace.document_path(document.content_hash, area).unlink(
+                        missing_ok=True
+                    )
+                except (WorkspaceError, OSError) as exc:
+                    logger.warning("cannot remove the PDF of %s: %s", document_id, exc)
+        self._catalog.record_event(
+            "deleted",
+            document_id,
+            content_hash=document.content_hash,
+            source_type=document.source_type.value,
+            source_url=document.source_url,
+            detail=f"file_removed={not keep_file}",
+        )
         audit_logger.info(
             "event=delete document_id=%s sha256=%s file_removed=%s",
             document_id,
@@ -264,3 +295,78 @@ class Indexer:
             not keep_file,
         )
         return True
+
+    def delete_documents(
+        self, document_ids: Sequence[str], *, keep_file: bool = False
+    ) -> BatchReport:
+        """Remove several documents, continuing after individual failures.
+
+        Returns
+        -------
+        BatchReport
+            ``failed`` maps each document that could not be removed (or is unknown) to a message.
+        """
+        report = BatchReport()
+        for document_id in dict.fromkeys(document_ids):
+            try:
+                if not self.delete_document(document_id, keep_file=keep_file):
+                    report.failed[document_id] = "unknown document"
+            except IndexingError as exc:
+                report.failed[document_id] = str(exc)
+        return report
+
+    def find_by_source_url(self, prefix: str) -> list[str]:
+        """Return the ids of the documents whose provenance URL starts with ``prefix``."""
+        return [
+            d.document_id
+            for d in self._all_documents()
+            if d.source_url is not None and d.source_url.startswith(prefix)
+        ]
+
+    def release(self, document_id: str) -> IndexResult:
+        """Release a quarantined document after human review, then index it.
+
+        Screening is skipped for this indexing: the reviewer has decided.
+
+        Raises
+        ------
+        IndexingError
+            If the document is unknown or not quarantined, or indexing fails (in which case
+            it stays active but unindexed; run ``index`` after fixing the cause).
+        """
+        document = self._catalog.get_document(document_id)
+        if document is None or document.status is not DocumentStatus.QUARANTINED:
+            raise IndexingError(f"document {document_id!r} is not quarantined")
+        try:
+            source = self._workspace.document_path(document.content_hash, Area.QUARANTINE)
+            if source.is_file():
+                os.replace(source, self._workspace.document_path(document.content_hash))
+        except (WorkspaceError, OSError) as exc:
+            raise IndexingError(f"cannot restore the PDF of {document_id!r}: {exc}") from exc
+        self._catalog.set_status(document_id, DocumentStatus.ACTIVE)
+        self._catalog.record_event("released", document_id, content_hash=document.content_hash)
+        audit_logger.info("event=release document_id=%s", document_id)
+        return self.index_document(document_id, screen=False)
+
+    def _quarantine(self, document: Document, reason: str) -> None:
+        """Make a document unretrievable and move its file to the quarantine area."""
+        document_id = document.document_id
+        if self._vector_store is not None:
+            try:
+                self._vector_store.delete_document(document_id)
+            except VectorStoreError as exc:
+                raise IndexingError(f"cannot delete vectors of {document_id!r}: {exc}") from exc
+        self._catalog.replace_content(document_id, [], [])
+        self._catalog.set_status(document_id, DocumentStatus.QUARANTINED)
+        try:
+            source = self._workspace.document_path(document.content_hash)
+            if source.is_file():
+                os.replace(
+                    source, self._workspace.document_path(document.content_hash, Area.QUARANTINE)
+                )
+        except (WorkspaceError, OSError) as exc:
+            logger.warning("cannot move the PDF of %s to quarantine: %s", document_id, exc)
+        self._catalog.record_event(
+            "quarantined", document_id, content_hash=document.content_hash, detail=reason
+        )
+        audit_logger.warning("event=quarantine document_id=%s reason=%s", document_id, reason)

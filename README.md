@@ -39,7 +39,7 @@ cp .env.example .env
 # edit .env: set KNOWLEDGE_READ_TOKEN and KNOWLEDGE_ADMIN_TOKEN to two different secrets,
 # for example generated with `openssl rand -hex 32`
 
-docker compose build                 # lexical only: docker build --build-arg EXTRAS=pdf -t pygdbknowledge .
+docker compose build                 # lexical only: KNOWLEDGE_EXTRAS=pdf in .env
 docker compose up -d
 docker compose ps                    # both services should become "healthy"
 ```

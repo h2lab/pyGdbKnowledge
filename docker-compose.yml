@@ -6,7 +6,12 @@
 # interface of the host. For remote access, put a TLS reverse proxy in front (see doc/).
 services:
   knowledge:
-    build: .
+    build:
+      context: .
+      # "host" lets the build use the host DNS when the default bridge cannot resolve names.
+      network: ${KNOWLEDGE_BUILD_NETWORK:-default}
+      args:
+        EXTRAS: ${KNOWLEDGE_EXTRAS:-pdf,vector}
     image: pygdbknowledge:latest
     restart: unless-stopped
     depends_on:

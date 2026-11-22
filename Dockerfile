@@ -25,7 +25,7 @@ RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin know
     && mkdir -p /var/lib/pygdbknowledge /models \
     && chown knowledge /var/lib/pygdbknowledge
 COPY --from=builder /opt/venv /opt/venv
-COPY config/settings.yaml /etc/pygdbknowledge/settings.yaml
+COPY --chown=10001:0 --chmod=0400 config/settings.yaml /etc/pygdbknowledge/settings.yaml
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -35,7 +35,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYGDBKNOWLEDGE__SERVER__HOST=0.0.0.0
 USER knowledge
 VOLUME ["/var/lib/pygdbknowledge"]
-EXPOSE 8080
+EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/api/v1/health', timeout=3)"]
 ENTRYPOINT ["pyGdbKnowledge"]

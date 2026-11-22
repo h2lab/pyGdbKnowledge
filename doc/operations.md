@@ -1,0 +1,107 @@
+<!--
+SPDX-FileCopyrightText: 2026 H2Lab Development Team
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# Operations guide
+
+See [architecture.md](architecture.md) for the design and container hardening.
+
+## Installation
+
+Python 3.12 or newer.
+
+```sh
+pip install .[pdf]            # lexical search (SQLite/FTS5), PDF and SVD import
+pip install .[pdf,vector]     # adds semantic search (Qdrant client, sentence-transformers)
+pip install .[ocr]            # optional OCR of scanned PDFs (needs the tesseract binary)
+```
+
+Container: `cp .env.example .env`, set `KNOWLEDGE_READ_TOKEN` and `KNOWLEDGE_ADMIN_TOKEN`
+(distinct values, e.g. `openssl rand -hex 32`), then `docker compose up -d`.
+
+## Configuration
+
+[config/settings.yaml](../config/settings.yaml) documents every key. Pass it with `--config`
+or `PYGDBKNOWLEDGE_CONFIG`; any key can be overridden by `PYGDBKNOWLEDGE__<SECTION>__<KEY>`.
+
+- Tokens belong in the environment, never in the file. Listening on a non-loopback address
+  requires `auth.read_token`.
+- The read token allows search and document reading; the admin token is needed for ingestion
+  and deletion.
+- Without `embeddings.enabled`, search is lexical only. With it, results fuse lexical, identifier
+  and vector rankings (RRF).
+
+## Running
+
+```sh
+pyGdbKnowledge serve --config settings.yaml
+curl http://127.0.0.1:8080/api/v1/health
+curl -H "Authorization: Bearer $READ_TOKEN" -X POST http://127.0.0.1:8080/api/v1/search \
+     -H 'Content-Type: application/json' -d '{"query": "FLASH_ACR LATENCY wait states"}'
+```
+
+API routes (prefix `/api/v1`): `GET /health`, `GET /stats`, `POST /search`,
+`GET /documents/{id}`, `GET /documents/{id}/sections`, `GET /documents/{id}/section/{section}`,
+and with the admin token `POST /admin/ingest`, `POST /admin/ingest/path`,
+`DELETE /admin/documents/{id}`, `GET /admin/tasks/{id}`.
+
+## Loading documents
+
+The service never fetches anything by itself. Documents enter through one of:
+
+1. `pyGdbKnowledge ingest FILE... --source-type official|vendor|community [--index]`
+   for local PDF or SVD files (metadata options: `--device-family`, `--device`,
+   `--document-type`, ...).
+2. `pyGdbKnowledge sync [--dry-run] [--index]`: downloads the documents listed in
+   [config/corpus.yaml](../config/corpus.yaml) (allow-listed HTTPS hosts, size cap, throttling)
+   and records SHA-256 digests in `config/corpus.lock.json` (trust on first use; a changed file
+   is refused unless the manifest pins another hash). Re-running skips what is present.
+3. The admin API (`/admin/ingest`).
+
+Documents flagged by content screening go to quarantine: review, then
+`pyGdbKnowledge release DOCUMENT_ID`. Every lifecycle event is kept in the audit trail
+(`pyGdbKnowledge audit [DOCUMENT_ID]`).
+
+To add a corpus entry, append the URL (taken from the document page on www.st.com) to the
+manifest with its title, `device_family`, `device` and `document_type`, then run `sync`.
+
+## Index maintenance
+
+- `pyGdbKnowledge index [ID...]` indexes documents that have no index yet.
+- `pyGdbKnowledge reindex [ID...]` rebuilds chunks, FTS5 rows and vectors from the stored files.
+- `pyGdbKnowledge delete ID... [--source-url-prefix P]` removes files, index and vectors.
+
+SQLite and Qdrant are derived data: both can be rebuilt from `documents/` alone.
+
+## Embedding model versions
+
+Vectors are not tagged with the model that produced them. After changing
+`embeddings.model` (or its `max_seq_length`), run `pyGdbKnowledge reindex` with embeddings
+enabled, otherwise old and new vectors are mixed. If the vector dimension changes, delete the
+Qdrant collection first. The default model `BAAI/bge-m3` is large; on a CPU-only machine a
+small model (for example `BAAI/bge-small-en-v1.5`) is far faster, with a lower quality ceiling.
+Models are read locally; set `embeddings.allow_download: true` only for the one-off fetch.
+
+## Backup and restore
+
+Back up, while the service is stopped or idle:
+
+- `<workspace>/documents/` (original files, named by hash) and `catalog.db`;
+- the configuration (without tokens, which live in your secret store);
+- `config/corpus.yaml` and `config/corpus.lock.json`.
+
+Restore: put them back, then run `pyGdbKnowledge reindex` to rebuild vectors (Qdrant storage
+can also be backed up but is not required). With compose, the data lives in the `workspace`
+and `qdrant` volumes.
+
+## Quality evaluation
+
+`pyGdbKnowledge evaluate config/eval/questions.yaml [--verbose] [--min-recall 0.9]` reports
+Recall@k and MRR per question category on the indexed corpus. Run it after any change to
+chunking, ranking or the embedding model, and add questions when the corpus grows.
+
+## Security notes
+
+Treat retrieved text as untrusted data. Keep Qdrant off any public network, terminate TLS in
+front of the API for any remote use, and treat logs as sensitive (they can contain queries).

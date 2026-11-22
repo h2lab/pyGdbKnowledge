@@ -8,8 +8,9 @@ Metadata fields are optional: unknown values stay ``None`` and are never invente
 
 from datetime import datetime
 from enum import StrEnum, auto, unique
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{0,127}$"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -79,6 +80,29 @@ class Chunk(_Model):
     section_path: str = ""
     peripheral: str | None = None
     page: int | None = Field(default=None, ge=1)
+
+
+class SearchFilters(_Model):
+    """Metadata filters accepted by search; only these keys are allowed (ANSSI R27).
+
+    Matching is case-insensitive and exact. ``document_type`` matches any listed value.
+    """
+
+    manufacturer: str | None = Field(default=None, min_length=1, max_length=64)
+    device_family: str | None = Field(default=None, min_length=1, max_length=64)
+    device: str | None = Field(default=None, min_length=1, max_length=64)
+    peripheral: str | None = Field(default=None, min_length=1, max_length=64)
+    document_type: tuple[Annotated[str, StringConstraints(min_length=1, max_length=64)], ...] = (
+        Field(default=(), max_length=8)
+    )
+
+
+class SearchHit(_Model):
+    """A retrieved chunk with its document and a relevance score (higher is better)."""
+
+    chunk: Chunk
+    document: Document
+    score: float
 
 
 class CatalogStats(_Model):

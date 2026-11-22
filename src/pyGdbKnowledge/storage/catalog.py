@@ -8,8 +8,18 @@ from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
-from .models import Chunk, CatalogStats, Document, DocumentStatus, Section, SourceType
+from .models import (
+    CatalogStats,
+    Chunk,
+    Document,
+    DocumentStatus,
+    SearchFilters,
+    SearchHit,
+    Section,
+    SourceType,
+)
 
 
 class CatalogError(Exception):
@@ -87,6 +97,33 @@ _MIGRATIONS: tuple[str, ...] = (
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
+
+# BM25 weights for (text, section_path, peripheral); tuned during corpus evaluation.
+_BM25_WEIGHTS = "1.0, 1.5, 0.5"
+_CHUNK_COLUMNS = (
+    "chunk_id",
+    "document_id",
+    "section_id",
+    "ordinal",
+    "text",
+    "content_hash",
+    "section_path",
+    "peripheral",
+    "page",
+)
+_DOCUMENT_COLUMNS = (
+    "source_type",
+    "status",
+    "manufacturer",
+    "device_family",
+    "device",
+    "document_type",
+    "revision",
+    "source_url",
+    "page_count",
+    "version",
+    "indexed_at",
+)
 
 
 class Catalog:
@@ -317,6 +354,67 @@ class Catalog:
             ).fetchall()
         return [Chunk(**dict(row)) for row in rows]
 
+    def search_chunks(self, match: str, filters: SearchFilters, limit: int) -> list[SearchHit]:
+        """Search chunks with an FTS5 expression, restricted to active documents.
+
+        Parameters
+        ----------
+        match : str
+            Trusted FTS5 expression, built by ``build_match_query``.
+        filters : SearchFilters
+            Metadata filters; values are bound as parameters.
+        limit : int
+            Maximum number of hits.
+
+        Returns
+        -------
+        list[SearchHit]
+            Hits ordered by decreasing relevance (negated BM25).
+        """
+        clauses = ["chunks_fts MATCH ?", "d.status = ?"]
+        params: list[str | int] = [match, DocumentStatus.ACTIVE.value]
+        for column, value in (
+            ("d.manufacturer", filters.manufacturer),
+            ("d.device_family", filters.device_family),
+            ("d.device", filters.device),
+            ("c.peripheral", filters.peripheral),
+        ):
+            if value is not None:
+                clauses.append(f"{column} = ? COLLATE NOCASE")
+                params.append(value)
+        if filters.document_type:
+            marks = ", ".join("?" for _ in filters.document_type)
+            clauses.append(f"LOWER(d.document_type) IN ({marks})")
+            params.extend(value.lower() for value in filters.document_type)
+        params.append(limit)
+        sql = (
+            "SELECT c.chunk_id, c.document_id, c.section_id, c.ordinal, c.text,"
+            " c.content_hash, c.section_path, c.peripheral, c.page,"
+            " d.title AS d_title, d.content_hash AS d_content_hash, d.source_type,"
+            " d.status, d.manufacturer, d.device_family, d.device, d.document_type,"
+            " d.revision, d.source_url, d.page_count, d.version, d.indexed_at,"
+            f" bm25(chunks_fts, {_BM25_WEIGHTS}) AS rank"
+            " FROM chunks_fts JOIN chunks c ON c.rowid = chunks_fts.rowid"
+            " JOIN documents d ON d.document_id = c.document_id"
+            f" WHERE {' AND '.join(clauses)} ORDER BY rank LIMIT ?"
+        )
+        with self._connect() as db:
+            rows = db.execute(sql, params).fetchall()
+        hits: list[SearchHit] = []
+        for row in rows:
+            data = dict(row)
+            document = _document(
+                {
+                    **{k: data[k] for k in _DOCUMENT_COLUMNS},
+                    "document_id": data["document_id"],
+                    "title": data["d_title"],
+                    "content_hash": data["d_content_hash"],
+                }
+            )
+            chunk = Chunk(**{k: data[k] for k in _CHUNK_COLUMNS})
+            hits.append(SearchHit(chunk=chunk, document=document, score=-float(data["rank"])))
+        return hits
+
     def stats(self) -> CatalogStats:
         """Return catalog counters."""
         with self._connect() as db:
@@ -327,7 +425,7 @@ class Catalog:
         return CatalogStats(schema_version=SCHEMA_VERSION, **counts)
 
 
-def _document(row: sqlite3.Row) -> Document:
+def _document(row: sqlite3.Row | dict[str, Any]) -> Document:
     data = dict(row)
     data["source_type"] = SourceType(data["source_type"])
     data["status"] = DocumentStatus(data["status"])

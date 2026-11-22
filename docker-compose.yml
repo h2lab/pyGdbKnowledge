@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+# Usage: cp .env.example .env, set the two tokens, then `docker compose up -d`.
+# Qdrant is reachable only from the internal network; the API is published on the loopback
+# interface of the host. For remote access, put a TLS reverse proxy in front (see doc/).
+services:
+  knowledge:
+    build: .
+    image: pygdbknowledge:latest
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      PYGDBKNOWLEDGE__AUTH__READ_TOKEN: ${KNOWLEDGE_READ_TOKEN:?set KNOWLEDGE_READ_TOKEN in .env}
+      PYGDBKNOWLEDGE__AUTH__ADMIN_TOKEN: ${KNOWLEDGE_ADMIN_TOKEN:?set KNOWLEDGE_ADMIN_TOKEN in .env}
+      PYGDBKNOWLEDGE__QDRANT__URL: http://qdrant:6333
+      PYGDBKNOWLEDGE__EMBEDDINGS__ENABLED: ${KNOWLEDGE_EMBEDDINGS:-false}
+      PYGDBKNOWLEDGE__EMBEDDINGS__MODEL: ${KNOWLEDGE_EMBEDDING_MODEL:-BAAI/bge-m3}
+    ports:
+      - "127.0.0.1:${KNOWLEDGE_PORT:-8080}:8080"
+    volumes:
+      - workspace:/var/lib/pygdbknowledge
+      # Embedding model prepared beforehand (the container makes no download).
+      - ${KNOWLEDGE_MODELS_DIR:-./models}:/models:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal, frontend]
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: unless-stopped
+    volumes:
+      - qdrant:/qdrant/storage
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+volumes:
+  workspace:
+  qdrant:
+
+networks:
+  # No route to the outside: Qdrant lives here only.
+  internal:
+    internal: true
+  frontend:

@@ -16,3 +16,4 @@ dist
 **venv*
 architecture_rag_local_pygdbtoolkit.md
 /*.pdf
+.env

@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+.git
+.tox
+.mypy_cache
+.env
+models
+tests
+*.pdf
+**/__pycache__
+*.egg-info

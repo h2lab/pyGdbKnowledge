@@ -134,3 +134,23 @@ Requirements follow the ANSSI guide on securing RAG systems (see
 - Qdrant is never exposed to clients or the public network; the service stays on the internal
   network. Token authentication, TLS when traversing an untrusted network.
 - Correlation id per request and ingestion job; logs treated as sensitive.
+
+## Container deployment
+
+`Dockerfile` builds a multi-stage image (build argument `EXTRAS`, default `pdf,vector`; use
+`pdf` for lexical search only) that runs as an unprivileged user (uid 10001). `docker-compose.yml`
+starts the service and Qdrant:
+
+- Qdrant sits on an `internal` network without outside route and publishes no port.
+- The API is published on `127.0.0.1` only; remote access goes through a TLS reverse proxy that
+  terminates TLS and forwards to the published port (the bearer tokens must not cross an
+  untrusted network in clear text).
+- The service root filesystem is read-only; only the `workspace` volume and a `noexec` `/tmp`
+  are writable. All capabilities are dropped and `no-new-privileges` is set.
+- Tokens come from `.env` (copy `.env.example`; compose refuses to start without them).
+- The container never downloads a model (`HF_HUB_OFFLINE=1`): put the embedding model under
+  `KNOWLEDGE_MODELS_DIR` and set `KNOWLEDGE_EMBEDDINGS=true`.
+- Healthchecks: `GET /api/v1/health` for the service, a TCP probe for Qdrant.
+
+Administration commands run in the same container, for example
+`docker compose exec knowledge pyGdbKnowledge audit`.

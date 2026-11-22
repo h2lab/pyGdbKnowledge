@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from pyGdbKnowledge.retrieval.lexical_search import MAX_TERMS, build_match_query, lexical_search
+from pyGdbKnowledge.retrieval.lexical_search import (
+    MAX_TERMS,
+    build_identifier_query,
+    build_match_query,
+    lexical_search,
+)
 from pyGdbKnowledge.storage.catalog import Catalog
 from pyGdbKnowledge.storage.models import (
     Chunk,
@@ -167,3 +172,17 @@ def test_filter_model_rejects_unknown_and_oversized_values() -> None:
         SearchFilters(manufacturer="x" * 65)
     with pytest.raises(ValidationError):
         SearchFilters(document_type=tuple("abcdefghi"))
+
+
+def test_stop_words_are_dropped_from_the_match_query() -> None:
+    """Question words do not enter the query unless nothing else is left."""
+    assert build_match_query("what is the FLASH_ACR latency") == '"flash_acr" OR "latency"'
+    assert build_match_query("what is the") == '"what" OR "is" OR "the"'
+
+
+def test_identifier_query_keeps_underscored_names_only() -> None:
+    """Identifier ranking ignores plain words and is empty without identifiers."""
+    assert build_identifier_query("FLASH_ACR wait states, RCC_AHB1ENR") == (
+        '"flash_acr" OR "rcc_ahb1enr"'
+    )
+    assert build_identifier_query("wait states") is None

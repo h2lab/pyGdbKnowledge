@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from ..storage.catalog import Catalog
 from ..storage.models import SearchFilters, SearchHit, SourceType
 from .embeddings import Embedder, EmbeddingError
-from .lexical_search import lexical_search
+from .lexical_search import identifier_search, lexical_search
 from .vector_store import VectorStore, VectorStoreError
 
 logger = logging.getLogger("pyGdbKnowledge")
@@ -89,6 +89,9 @@ class HybridSearcher:
         rankings: list[list[SearchHit]] = [
             lexical_search(self._catalog, query, filters, candidates)
         ]
+        identifiers = identifier_search(self._catalog, query, filters, candidates)
+        if identifiers:
+            rankings.append(identifiers)
         vector_ranking = self._vector_ranking(query, filters, candidates)
         if vector_ranking is not None:
             rankings.append(vector_ranking)

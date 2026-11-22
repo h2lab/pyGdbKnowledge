@@ -14,3 +14,4 @@ dist
 *.pyc
 **/.doc
 **venv*
+architecture_rag_local_pygdbtoolkit.md

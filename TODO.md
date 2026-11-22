@@ -6,8 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 # TODO
 
 Each step is one commit and must leave `tox` green (tests, lint, typecheck).
-Reference: [architecture_rag_local_pygdbtoolkit.md](architecture_rag_local_pygdbtoolkit.md).
-Development rules: [AGENTS.md](AGENTS.md). Everything in this repository is in English.
+Reference: [doc/architecture.md](doc/architecture.md).
+Development rules: [AGENTS.md](AGENTS.md), including the ANSSI RAG security guide (R1-R35). Everything in this repository is in English.
 
 Scope: the server only. The pyGdbToolkit integration (`KnowledgeClient`, `--knowledge-url`,
 tools, prompt) belongs to the other repository, once the API is stable.
@@ -32,6 +32,7 @@ Workspace layout:
 <workspace>/
 ├── documents/      # original PDFs (named by hash)
 ├── extracted/      # extracted text/pages (cache)
+├── quarantine/     # untrusted documents awaiting validation
 ├── qdrant/         # Qdrant storage if embedded
 ├── catalog.db      # SQLite: catalog + FTS5
 └── tmp/            # uploads in progress
@@ -40,7 +41,7 @@ Workspace layout:
 ## Foundation
 
 - [ ] **1. Layout and dependencies**: `api/`, `ingestion/`, `retrieval/`, `storage/` tree
-  (section 18). Dependencies: FastAPI, Uvicorn, Pydantic, PyYAML (httpx for dev). Optional
+  . Dependencies: FastAPI, Uvicorn, Pydantic, PyYAML (httpx for dev). Optional
   extras `[vector]`, `[pdf]`, `[ocr]` for heavy dependencies.
 - [ ] **2. Configuration**: `config/settings.yaml` + environment variable overrides
   (`config.py`). Workspace, Qdrant URL, embedding model, read/admin tokens, limits.
@@ -62,8 +63,11 @@ Workspace layout:
 - [ ] **9. Qdrant vector store**: configured collection, upsert, filtered search, in-memory
   implementation for tests.
 - [ ] **10. Hybrid search and `POST /search`**: RRF fusion of lexical + vector results,
-  ranking with reliability per `source_type`, response schema from section 7, result limits.
-- [ ] **11. API security**: read/admin tokens, timeouts, limits, uniform errors.
+  ranking with reliability per `source_type`, response schema, result limits.
+- [ ] **11. API security** (ANSSI R18, R19, R27, R29, R30, R31): separate read/admin
+  credentials, server-side filter/collection control, parameter validation, rate limits,
+  timeouts, result count/size limits, relevance threshold, correlation id, audit logging of
+  auth decisions and returned ids, no embeddings in responses or logs, uniform errors.
 
 ## Phase 2: ingestion (local import)
 
@@ -80,18 +84,22 @@ Workspace layout:
 - [ ] **16. `POST /admin/ingest`**: upload or path under an allowed directory, admin token,
   asynchronous task with status tracking.
 - [ ] **17. Optional OCR**: enabled when extracted text is insufficient (`ocr.py`).
-- [ ] **18. Corpus manifest (optional)**: `config/corpus.yaml` (URL, expected SHA-256,
+- [ ] **18. Security hardening of ingestion** (ANSSI R22, R25, R25+, R26): content/metadata
+  checks (hidden text, injection patterns), quarantine area, lifecycle audit trail (id,
+  source, date, version, SHA-256, channel, validation status, chunk/vector ids), fast removal
+  of a document/batch/source with all derived data, retrievability test after removal.
+- [ ] **19. Corpus manifest (optional)**: `config/corpus.yaml` (URL, expected SHA-256,
   metadata) and `pyGdbKnowledge sync`: downloads what is missing, verifies the hash, ingests.
   Explicit allowed domains, never triggered by the agent.
 
 ## Quality and operations
 
-- [ ] **19. Pilot corpus and evaluation**: 10-30 documents, questions (register, bit field,
+- [ ] **20. Pilot corpus and evaluation**: 10-30 documents, questions (register, bit field,
   timing, errata, DMA), page/section verification, Recall@k, chunking/scoring tuning.
-- [ ] **20. Docker and Compose**: `Dockerfile` (non-root user, read-only filesystem outside
+- [ ] **21. Docker and Compose**: `Dockerfile` (non-root user, read-only filesystem outside
   workspace/tmp), `docker-compose.yml` with Qdrant, workspace volume, `.env.example`,
   healthchecks.
-- [ ] **21. Documentation**: installation, operations, backup (`documents/` + `catalog.db` +
+- [ ] **22. Documentation**: installation, operations, backup (`documents/` + `catalog.db` +
   config), index rebuild, embedding versions.
 
 ## Later (V2)

@@ -55,3 +55,38 @@ public behavior unless a task explicitly requires a change.
 - Run the relevant Tox environments before considering a Python change done:
   `tox -e py312` for tests, `tox -e lint` for Black and Flake8, and
   `tox -e typecheck` for Mypy.
+
+## RAG security requirements
+
+The RAG implementation shall respect the ANSSI guide on securing retrieval-augmented
+generative AI systems (R1-R35):
+https://messervices.cyber.gouv.fr/documents-guides/Guide_Securisation_des_systemes_d_IA_generative_augmentee_par_recuperation.pdf
+
+This service is a retriever and ingestion component of an agentic, tool-using system
+(categories "advisory" and "agentic" of the guide). Rules derived from the guide:
+
+- Responses are untrusted (R2): return passages with provenance as data, never as
+  instructions. The API is read-only for agent tools (R3, R30); writes are limited to
+  authenticated administration/ingestion functions.
+- Queries (R27): validate parameters (length, limits, allowed filter keys). Allowed
+  collections and filters are decided server-side from the authenticated identity and the
+  configuration, never taken from client input.
+- Retrieval (R29, R30+): bound the number and size of returned segments, apply a minimum
+  relevance threshold, keep provenance (document, revision, section, page, source, hash).
+  Apply authorization per document/segment at retrieval time.
+- Vectors (R31): never return embeddings by default, never log them.
+- Ingestion (R22, R25, R25+, R26): ingest only what the service needs; validate formats and
+  metadata; detect hidden or injected content as a risk-reduction measure; keep untrusted
+  sources in a quarantine area, not retrievable until validated; trace every add, change and
+  removal (id, source, origin, date, version, SHA-256, channel, validation status, chunk and
+  vector ids); support fast removal of a document, batch or source, including derived data.
+- Limits (R18): rate limits, quotas, timeouts and size limits on every exposed interface.
+- Observability (R19): correlation id per request and ingestion job; log authentication and
+  authorization decisions, filters applied and returned ids; do not log full queries or
+  contexts systematically; treat logs as sensitive.
+- Identities (R20, R21): distinct read and admin credentials per component, no shared secrets;
+  support TLS (mTLS when relevant) for flows leaving the host.
+- Storage (R32, R33): document index parameters and rebuild procedure; rely on filesystem or
+  volume encryption for data at rest.
+- Dependencies (R16, R17): pin and review dependencies, keep an SBOM, keep the system
+  patched.

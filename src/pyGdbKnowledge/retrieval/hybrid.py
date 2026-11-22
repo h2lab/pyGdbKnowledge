@@ -1,0 +1,133 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+"""Hybrid retrieval: exact (FTS5) and semantic (vector) results fused by rank."""
+
+import logging
+from collections.abc import Mapping
+
+from ..storage.catalog import Catalog
+from ..storage.models import SearchFilters, SearchHit, SourceType
+from .embeddings import Embedder, EmbeddingError
+from .lexical_search import lexical_search
+from .vector_store import VectorStore, VectorStoreError
+
+logger = logging.getLogger("pyGdbKnowledge")
+
+RRF_K = 60
+CANDIDATE_FACTOR = 5
+MAX_CANDIDATES = 200
+
+# Multiplier applied per source reliability class; official documents rank first.
+DEFAULT_SOURCE_WEIGHTS: Mapping[SourceType, float] = {
+    SourceType.OFFICIAL: 1.0,
+    SourceType.VENDOR: 0.9,
+    SourceType.COMMUNITY: 0.7,
+}
+
+
+class HybridSearcher:
+    """Fuse lexical and vector rankings with reciprocal rank fusion (RRF).
+
+    Scores are normalized to ``(0, 1]``: a chunk ranked first by both retrievers from an
+    official source scores 1.0, so a single relevance threshold is meaningful. When the vector
+    side is absent or failing, the search degrades to lexical results only.
+
+    Parameters
+    ----------
+    catalog : Catalog
+        Catalog holding chunks and the FTS5 index.
+    embedder : Embedder | None
+        Query embedder; None disables semantic search.
+    vector_store : VectorStore | None
+        Vector index; None disables semantic search.
+    source_weights : Mapping[SourceType, float] | None
+        Reliability multiplier per source type.
+    """
+
+    def __init__(
+        self,
+        catalog: Catalog,
+        embedder: Embedder | None = None,
+        vector_store: VectorStore | None = None,
+        source_weights: Mapping[SourceType, float] | None = None,
+    ) -> None:
+        self._catalog = catalog
+        self._embedder = embedder
+        self._vector_store = vector_store
+        self._weights = dict(source_weights or DEFAULT_SOURCE_WEIGHTS)
+
+    @property
+    def semantic(self) -> bool:
+        """Whether semantic search is configured."""
+        return self._embedder is not None and self._vector_store is not None
+
+    def search(
+        self, query: str, filters: SearchFilters, limit: int, min_score: float = 0.0
+    ) -> list[SearchHit]:
+        """Search and rank chunks.
+
+        Parameters
+        ----------
+        query : str
+            User query.
+        filters : SearchFilters
+            Metadata filters, enforced by both retrievers.
+        limit : int
+            Maximum number of hits.
+        min_score : float
+            Hits scoring below this normalized score are dropped (ANSSI R29).
+
+        Returns
+        -------
+        list[SearchHit]
+            Hits by decreasing score, with normalized scores.
+        """
+        if limit < 1:
+            return []
+        candidates = min(max(limit * CANDIDATE_FACTOR, 20), MAX_CANDIDATES)
+        rankings: list[list[SearchHit]] = [
+            lexical_search(self._catalog, query, filters, candidates)
+        ]
+        vector_ranking = self._vector_ranking(query, filters, candidates)
+        if vector_ranking is not None:
+            rankings.append(vector_ranking)
+
+        fused: dict[str, float] = {}
+        hits: dict[str, SearchHit] = {}
+        for ranking in rankings:
+            for rank, hit in enumerate(ranking, start=1):
+                chunk_id = hit.chunk.chunk_id
+                hits[chunk_id] = hit
+                fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (RRF_K + rank)
+
+        best_possible = len(rankings) / (RRF_K + 1)
+        scored = [
+            (chunk_id, fused[chunk_id] * self._weights[hits[chunk_id].document.source_type])
+            for chunk_id in fused
+        ]
+        scored.sort(key=lambda item: (-item[1], item[0]))
+        results: list[SearchHit] = []
+        for chunk_id, raw in scored:
+            score = raw / best_possible
+            if score < min_score:
+                break
+            results.append(hits[chunk_id].model_copy(update={"score": score}))
+            if len(results) == limit:
+                break
+        return results
+
+    def _vector_ranking(
+        self, query: str, filters: SearchFilters, candidates: int
+    ) -> list[SearchHit] | None:
+        if self._embedder is None or self._vector_store is None or not query.strip():
+            return None
+        try:
+            vector = self._embedder.embed([query])[0]
+            vector_hits = self._vector_store.search(vector, filters, candidates)
+        except (EmbeddingError, VectorStoreError) as exc:
+            logger.warning("semantic search unavailable, using lexical only: %s", exc)
+            return None
+        # The vector index may be stale: only chunks of active documents survive.
+        loaded = self._catalog.get_hits([hit.chunk_id for hit in vector_hits])
+        return [loaded[hit.chunk_id] for hit in vector_hits if hit.chunk_id in loaded]

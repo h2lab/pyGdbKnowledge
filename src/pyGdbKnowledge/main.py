@@ -12,8 +12,9 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 
 from . import __version__
-from .api import documents, health
+from .api import documents, health, search
 from .config import Settings
+from .retrieval.hybrid import HybridSearcher
 from .storage.catalog import Catalog
 from .workspace import Workspace
 
@@ -39,7 +40,9 @@ def configure_logging(level: str) -> None:
     root.setLevel(level)
 
 
-def create_app(settings: Settings, workspace: Workspace) -> FastAPI:
+def create_app(
+    settings: Settings, workspace: Workspace, searcher: HybridSearcher | None = None
+) -> FastAPI:
     """Build the FastAPI application.
 
     Parameters
@@ -48,6 +51,8 @@ def create_app(settings: Settings, workspace: Workspace) -> FastAPI:
         Validated service settings.
     workspace : Workspace
         Opened workspace.
+    searcher : HybridSearcher | None
+        Retrieval engine; defaults to lexical-only search over the catalog.
 
     Returns
     -------
@@ -64,6 +69,7 @@ def create_app(settings: Settings, workspace: Workspace) -> FastAPI:
     app.state.settings = settings
     app.state.workspace = workspace
     app.state.catalog = Catalog(workspace.catalog_path)
+    app.state.searcher = searcher or HybridSearcher(app.state.catalog)
 
     @app.middleware("http")
     async def correlation_id(
@@ -86,4 +92,5 @@ def create_app(settings: Settings, workspace: Workspace) -> FastAPI:
 
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(documents.router, prefix=API_PREFIX)
+    app.include_router(search.router, prefix=API_PREFIX)
     return app

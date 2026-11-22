@@ -126,6 +126,29 @@ _DOCUMENT_COLUMNS = (
 )
 
 
+_SQL_BATCH = 500
+_HIT_SELECT = (
+    "SELECT c.chunk_id, c.document_id, c.section_id, c.ordinal, c.text,"
+    " c.content_hash, c.section_path, c.peripheral, c.page,"
+    " d.title AS d_title, d.content_hash AS d_content_hash, d.source_type,"
+    " d.status, d.manufacturer, d.device_family, d.device, d.document_type,"
+    " d.revision, d.source_url, d.page_count, d.version, d.indexed_at"
+)
+
+
+def _hit(data: dict[str, Any], score: float) -> SearchHit:
+    document = _document(
+        {
+            **{k: data[k] for k in _DOCUMENT_COLUMNS},
+            "document_id": data["document_id"],
+            "title": data["d_title"],
+            "content_hash": data["d_content_hash"],
+        }
+    )
+    chunk = Chunk(**{k: data[k] for k in _CHUNK_COLUMNS})
+    return SearchHit(chunk=chunk, document=document, score=score)
+
+
 class Catalog:
     """Document catalog stored in a SQLite file.
 
@@ -388,32 +411,45 @@ class Catalog:
             params.extend(value.lower() for value in filters.document_type)
         params.append(limit)
         sql = (
-            "SELECT c.chunk_id, c.document_id, c.section_id, c.ordinal, c.text,"
-            " c.content_hash, c.section_path, c.peripheral, c.page,"
-            " d.title AS d_title, d.content_hash AS d_content_hash, d.source_type,"
-            " d.status, d.manufacturer, d.device_family, d.device, d.document_type,"
-            " d.revision, d.source_url, d.page_count, d.version, d.indexed_at,"
-            f" bm25(chunks_fts, {_BM25_WEIGHTS}) AS rank"
+            f"{_HIT_SELECT}, bm25(chunks_fts, {_BM25_WEIGHTS}) AS rank"
             " FROM chunks_fts JOIN chunks c ON c.rowid = chunks_fts.rowid"
             " JOIN documents d ON d.document_id = c.document_id"
             f" WHERE {' AND '.join(clauses)} ORDER BY rank LIMIT ?"
         )
         with self._connect() as db:
             rows = db.execute(sql, params).fetchall()
-        hits: list[SearchHit] = []
-        for row in rows:
-            data = dict(row)
-            document = _document(
-                {
-                    **{k: data[k] for k in _DOCUMENT_COLUMNS},
-                    "document_id": data["document_id"],
-                    "title": data["d_title"],
-                    "content_hash": data["d_content_hash"],
-                }
+        return [_hit(dict(row), -float(row["rank"])) for row in rows]
+
+    def get_hits(self, chunk_ids: Sequence[str]) -> dict[str, SearchHit]:
+        """Load chunks with their documents, keeping only active documents.
+
+        Used to re-validate candidates coming from the vector index, which may be stale.
+
+        Parameters
+        ----------
+        chunk_ids : Sequence[str]
+            Chunk identifiers.
+
+        Returns
+        -------
+        dict[str, SearchHit]
+            Hits (score 0) by chunk id; unknown or quarantined chunks are absent.
+        """
+        unique = list(dict.fromkeys(chunk_ids))
+        found: dict[str, SearchHit] = {}
+        for start in range(0, len(unique), _SQL_BATCH):
+            batch = unique[start : start + _SQL_BATCH]
+            marks = ", ".join("?" for _ in batch)
+            sql = (
+                f"{_HIT_SELECT} FROM chunks c JOIN documents d ON d.document_id = c.document_id"
+                f" WHERE d.status = ? AND c.chunk_id IN ({marks})"
             )
-            chunk = Chunk(**{k: data[k] for k in _CHUNK_COLUMNS})
-            hits.append(SearchHit(chunk=chunk, document=document, score=-float(data["rank"])))
-        return hits
+            with self._connect() as db:
+                rows = db.execute(sql, [DocumentStatus.ACTIVE.value, *batch]).fetchall()
+            for row in rows:
+                hit = _hit(dict(row), 0.0)
+                found[hit.chunk.chunk_id] = hit
+        return found
 
     def stats(self) -> CatalogStats:
         """Return catalog counters."""

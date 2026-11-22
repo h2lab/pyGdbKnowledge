@@ -4,6 +4,7 @@
 """Tests for the SQLite catalog."""
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -64,7 +65,7 @@ def catalog(tmp_path: Path) -> Catalog:
 
 
 def _fts_count(catalog: Catalog, query: str) -> int:
-    with sqlite3.connect(catalog.path) as db:
+    with closing(sqlite3.connect(catalog.path)) as db:
         return int(
             db.execute(
                 "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH ?", (query,)
@@ -87,7 +88,7 @@ def test_new_catalog_is_migrated(catalog: Catalog) -> None:
 def test_newer_schema_refused(tmp_path: Path) -> None:
     """A database from a newer version is not opened."""
     path = tmp_path / "catalog.db"
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db:
         db.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
     with pytest.raises(CatalogError, match="newer"):
         Catalog(path)

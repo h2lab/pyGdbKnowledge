@@ -38,9 +38,16 @@ class QdrantSettings(_Section):
 
 
 class EmbeddingSettings(_Section):
-    """Local embedding model settings."""
+    """Local embedding model settings.
+
+    The model is read from a local path or cache; downloads are refused unless
+    ``allow_download`` is set (no outbound connection by default).
+    """
 
     model: str = "BAAI/bge-m3"
+    allow_download: bool = False
+    batch_size: int = Field(default=16, ge=1, le=256)
+    max_seq_length: int = Field(default=512, ge=16, le=8192)
 
 
 class AuthSettings(_Section):

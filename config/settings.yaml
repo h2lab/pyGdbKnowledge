@@ -18,7 +18,10 @@ qdrant:
   collection: knowledge
 
 embeddings:
-  model: BAAI/bge-m3
+  model: BAAI/bge-m3        # local path or locally cached model name
+  allow_download: false     # keep false: the daemon makes no outbound connection
+  batch_size: 16
+  max_seq_length: 512
 
 limits:
   max_results: 20

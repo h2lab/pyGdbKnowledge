@@ -262,3 +262,12 @@ def test_include_patterns_restrict_the_svd_files(tmp_path: Path) -> None:
     narrowed = env.manifest.model_copy(update={"sources": (source,)})
     plans = plan_sync(narrowed, env.fetcher, 10_000_000)
     assert [p.metadata.device for p in plans] == ["STM32A"]
+
+
+def test_family_pattern_sets_the_device_family(tmp_path: Path) -> None:
+    """The first group of the pattern becomes the upper-case device family."""
+    env = scenario(tmp_path)
+    source = env.manifest.sources[0].model_copy(update={"family_pattern": "(stm32[a-z])"})
+    narrowed = env.manifest.model_copy(update={"sources": (source,)})
+    plans = plan_sync(narrowed, env.fetcher, 10_000_000)
+    assert {p.metadata.device_family for p in plans} == {"STM32A", "STM32B"}

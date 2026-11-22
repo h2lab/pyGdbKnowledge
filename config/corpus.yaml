@@ -24,6 +24,7 @@ sources:
     vendors: [STMicro]
     # Pilot scope; remove `include` (and add Nordic, NXP, ...) to widen the corpus.
     include: [STM32F4*, STM32U5*, STM32N6*]
+    family_pattern: "(STM32[A-Z][0-9])"
     manufacturers:
       STMicro: STMicroelectronics
 
@@ -67,3 +68,8 @@ sources:
         title: AN4488 Getting started with STM32F4xxxx MCU hardware development
         device_family: STM32F4
         document_type: application_note
+      - url: https://www.st.com/resource/en/errata_sheet/es0182-stm32f405407xx-and-stm32f415417xx-device-errata-stmicroelectronics.pdf
+        title: ES0182 STM32F405/407xx and STM32F415/417xx device errata
+        device_family: STM32F4
+        device: STM32F407
+        document_type: errata

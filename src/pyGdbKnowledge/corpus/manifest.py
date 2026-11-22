@@ -53,6 +53,9 @@ class GithubSvdSource(_Model):
     ``include`` optionally restricts the files to these patterns (``fnmatch``, case-insensitive,
     matched on the file name without extension); empty means every file of the vendors.
 
+    ``family_pattern`` is a regular expression matched at the start of the file name; its first
+    group (or the whole match) becomes the ``device_family`` (``STM32F4`` for ``STM32F407``).
+
     ``ref`` should be a full commit hash: the files are then immutable and reproducible. A
     branch name is resolved to its current commit at each sync.
     """
@@ -65,6 +68,7 @@ class GithubSvdSource(_Model):
     path_prefix: str = Field(default="data", pattern=r"^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$")
     vendors: tuple[str, ...] = Field(min_length=1)
     include: tuple[str, ...] = ()
+    family_pattern: str | None = None
     manufacturers: dict[str, str] = Field(default_factory=dict)
 
 

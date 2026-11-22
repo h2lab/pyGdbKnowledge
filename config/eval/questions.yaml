@@ -5,7 +5,7 @@
 # Each question lists the evidence a correct answer needs; `document` is matched against the
 # document id, title and device, `contains` against the chunk text (case-insensitive).
 # Categories: register, bitfield, address, dma, timing, hardware, cross.
-# Gap: no errata sheet in the pilot corpus yet (add ST errata URLs to corpus.yaml first).
+# Gap: only one errata sheet (ES0182, STM32F407) in the pilot corpus.
 
 questions:
   # --- registers and addresses (SVD) ---
@@ -125,6 +125,17 @@ questions:
     query: HSE crystal oscillator load capacitors layout
     filters: {device_family: STM32U5}
     expect: [{document: an5373, contains: ["HSE"]}]
+
+  - id: f407-errata-i2c-stop
+    category: errata
+    query: I2C start cannot be generated after a misplaced Stop
+    filters: {device_family: STM32F4}
+    expect: [{document: es0182, contains: ["misplaced Stop"]}]
+  - id: f407-errata-smbus
+    category: errata
+    query: SMBus not fully supported errata
+    filters: {device: STM32F407}
+    expect: [{document: es0182, contains: ["SMBus"]}]
 
   # --- cross-corpus ---
   - id: cross-u5-rcc

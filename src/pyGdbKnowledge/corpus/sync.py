@@ -133,6 +133,9 @@ def _expand_github(
         ):
             continue
         manufacturer = source.manufacturers.get(vendor, vendor)
+        family = None
+        if source.family_pattern and (found := re.match(source.family_pattern, stem, re.I)):
+            family = (found.group(1) if found.groups() else found.group(0)).upper()
         url = f"https://{GITHUB_RAW_HOST}/{source.repo}/{sha}/{quote(path)}"
         plans.append(
             PlannedDownload(
@@ -142,6 +145,7 @@ def _expand_github(
                     source_type=source.source_type,
                     title=f"{stem} SVD",
                     manufacturer=manufacturer,
+                    device_family=family,
                     device=stem,
                     document_type="svd",
                     revision=sha[:12],

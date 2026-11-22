@@ -29,6 +29,7 @@
   "https://www.st.com/resource/en/datasheet/stm32n657x0.pdf": "691c067d35ce3174e4189cbaf3cb8a71a588ac3e451dd120513ac352a3795c20",
   "https://www.st.com/resource/en/datasheet/stm32u595ai.pdf": "1a6951f7fcbc7a72653a9610dbfc26e6ef45b0d0847be7b28cdc327abbd3051f",
   "https://www.st.com/resource/en/datasheet/stm32u5a5zj.pdf": "62f035250fb393509554739e3b4e23d49321a4fcfbfb39fd3d33e99a3ac23760",
-  "https://www.st.com/resource/en/datasheet/stm32u5a9bj.pdf": "62f035250fb393509554739e3b4e23d49321a4fcfbfb39fd3d33e99a3ac23760"
+  "https://www.st.com/resource/en/datasheet/stm32u5a9bj.pdf": "62f035250fb393509554739e3b4e23d49321a4fcfbfb39fd3d33e99a3ac23760",
+  "https://www.st.com/resource/en/errata_sheet/es0182-stm32f405407xx-and-stm32f415417xx-device-errata-stmicroelectronics.pdf": "1d3da0f99b85013548d17df07919516bf862f8f38cbd1a61f08e75abb8e4c54f"
  }
 }

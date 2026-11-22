@@ -253,6 +253,14 @@ class Catalog:
             ).fetchone()
         return None if row is None else _document(row)
 
+    def get_document_by_hash(self, content_hash: str) -> Document | None:
+        """Return the document with this SHA-256 content hash, or None."""
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT * FROM documents WHERE content_hash = ?", (content_hash,)
+            ).fetchone()
+        return None if row is None else _document(row)
+
     def list_documents(self, limit: int = 50, offset: int = 0) -> list[Document]:
         """Return documents ordered by id, using bounded pagination."""
         with self._connect() as db:

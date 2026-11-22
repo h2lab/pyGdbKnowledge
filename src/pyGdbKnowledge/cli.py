@@ -11,9 +11,13 @@ from pathlib import Path
 import uvicorn
 
 from .config import ConfigError, load_settings
+from .ingestion.importer import DocumentMetadata, IngestError, import_pdf
 from .main import configure_logging, create_app
-from .storage.catalog import CatalogError
+from .storage.catalog import Catalog, CatalogError
+from .storage.models import SourceType
 from .workspace import Workspace, WorkspaceError
+
+_CONFIG_HELP = "YAML configuration file (default: $PYGDBKNOWLEDGE_CONFIG, else built-in defaults)"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -23,12 +27,60 @@ def _parser() -> argparse.ArgumentParser:
     )
     commands = parser.add_subparsers(dest="command", required=True)
     serve = commands.add_parser("serve", help="run the HTTP API")
-    serve.add_argument(
-        "--config",
-        type=Path,
-        help="YAML configuration file (default: $PYGDBKNOWLEDGE_CONFIG, else built-in defaults)",
+    serve.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    ingest = commands.add_parser("ingest", help="import local PDF files into the workspace")
+    ingest.add_argument("files", nargs="+", type=Path, metavar="FILE", help="PDF files to import")
+    ingest.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    ingest.add_argument(
+        "--source-type",
+        required=True,
+        choices=[t.value for t in SourceType],
+        help="reliability class of the source: official, vendor or community",
     )
+    ingest.add_argument("--title", help="document title (single file only; default: file name)")
+    ingest.add_argument("--manufacturer")
+    ingest.add_argument("--device-family")
+    ingest.add_argument("--device")
+    ingest.add_argument("--document-type", help="e.g. datasheet, reference_manual")
+    ingest.add_argument("--revision")
+    ingest.add_argument("--source-url", help="provenance only; the URL is never fetched")
     return parser
+
+
+def _ingest(args: argparse.Namespace) -> int:
+    if args.title and len(args.files) > 1:
+        print("pyGdbKnowledge: --title requires a single file", file=sys.stderr)
+        return 2
+    try:
+        settings = load_settings(args.config)
+        workspace = Workspace(settings.workspace)
+        catalog = Catalog(workspace.catalog_path)
+    except (ConfigError, WorkspaceError, CatalogError) as exc:
+        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        return 1
+    metadata = DocumentMetadata(
+        source_type=SourceType(args.source_type),
+        title=args.title,
+        manufacturer=args.manufacturer,
+        device_family=args.device_family,
+        device=args.device,
+        document_type=args.document_type,
+        revision=args.revision,
+        source_url=args.source_url,
+    )
+    failures = 0
+    for path in args.files:
+        try:
+            result = import_pdf(
+                workspace, catalog, path, metadata, settings.limits.max_upload_bytes
+            )
+        except (IngestError, CatalogError) as exc:
+            print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+            failures += 1
+            continue
+        state = "imported" if result.created else "already present"
+        print(f"{state}: {result.document.document_id} ({path.name})")
+    return 1 if failures else 0
 
 
 def _serve(config: Path | None) -> int:
@@ -66,4 +118,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "serve":
         return _serve(args.config)
+    if args.command == "ingest":
+        return _ingest(args)
     raise AssertionError(f"unhandled command {args.command!r}")

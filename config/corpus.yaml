@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+# Corpus manifest for `pyGdbKnowledge sync` (operator command; the HTTP API never downloads).
+# Hashes of files without an explicit `sha256` are recorded in corpus.lock.json on first
+# download (trust on first use) and verified afterwards. Commit the lock file.
+
+# Only these hosts may be contacted, redirects included. HTTPS only.
+allowed_domains:
+  - api.github.com
+  - raw.githubusercontent.com
+  - www.st.com
+request_delay_s: 1.0
+timeout_s: 60
+
+sources:
+  # Hardware description (SVD) files, pinned to a commit for reproducibility.
+  - name: cmsis-svd
+    kind: github_svd
+    source_type: vendor
+    repo: cmsis-svd/cmsis-svd-data
+    ref: c65f8551e57c770344d229dcaa0bf838fa29aff4
+    path_prefix: data
+    vendors: [STMicro, Nordic, NXP]
+    manufacturers:
+      STMicro: STMicroelectronics
+      Nordic: Nordic Semiconductor
+
+  # ST documents (datasheets, reference manuals, application notes, errata, ...): list each
+  # one explicitly. Take the URL from the document page on www.st.com; add `sha256` to pin it.
+  - name: st-documents
+    kind: urls
+    source_type: official
+    manufacturer: STMicroelectronics
+    documents:
+      - url: https://www.st.com/resource/en/datasheet/stm32u595ai.pdf
+        title: STM32U595xx datasheet
+        device_family: STM32U5
+        document_type: datasheet

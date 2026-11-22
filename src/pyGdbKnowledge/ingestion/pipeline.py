@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-"""Indexing pipeline: PDF file to sections, chunks, FTS5 entries and vectors."""
+"""Indexing pipeline: PDF or SVD file to sections, chunks, FTS5 entries and vectors."""
 
 import logging
 import os
@@ -21,6 +21,7 @@ from .chunking import chunk_document
 from .extract import ExtractedDocument, ExtractionError, extract_pdf
 from .ocr import OcrError, needs_ocr, ocr_pdf
 from .screening import screen_chunks
+from .svd import SvdError, chunk_svd
 
 logger = logging.getLogger("pyGdbKnowledge")
 
@@ -115,13 +116,18 @@ class Indexer:
         if document.status is not DocumentStatus.ACTIVE:
             raise IndexingError(f"document {document_id!r} is not active")
         try:
-            path = self._workspace.document_path(document.content_hash)
-            if not path.is_file():
-                raise IndexingError(f"stored PDF of {document_id!r} is missing")
-            extracted = self._extract(path)
-        except (WorkspaceError, ExtractionError, OcrError) as exc:
+            path = self._workspace.stored_document(document.content_hash)
+            if path is None:
+                raise IndexingError(f"stored file of {document_id!r} is missing")
+            if path.suffix == ".svd":
+                chunked = chunk_svd(document_id, path, self._settings.ingestion)
+                page_count = None
+            else:
+                extracted = self._extract(path)
+                chunked = chunk_document(document_id, extracted, self._settings.ingestion)
+                page_count = extracted.page_count
+        except (WorkspaceError, ExtractionError, OcrError, SvdError) as exc:
             raise IndexingError(f"cannot extract {document_id!r}: {exc}") from exc
-        chunked = chunk_document(document_id, extracted, self._settings.ingestion)
         if not chunked.chunks:
             raise IndexingError(f"no extractable text in {document_id!r} (scanned? enable OCR)")
         if screen and self._settings.ingestion.quarantine_suspicious:
@@ -136,7 +142,8 @@ class Indexer:
 
         try:
             self._catalog.replace_content(document_id, list(chunked.sections), list(chunked.chunks))
-            self._catalog.set_page_count(document_id, extracted.page_count)
+            if page_count is not None:
+                self._catalog.set_page_count(document_id, page_count)
         except CatalogError as exc:
             raise IndexingError(f"cannot store the index of {document_id!r}: {exc}") from exc
         if self._vector_store is not None:
@@ -275,11 +282,11 @@ class Indexer:
         if not keep_file:
             for area in (Area.DOCUMENTS, Area.QUARANTINE):
                 try:
-                    self._workspace.document_path(document.content_hash, area).unlink(
-                        missing_ok=True
-                    )
+                    stored = self._workspace.stored_document(document.content_hash, area)
+                    if stored is not None:
+                        stored.unlink(missing_ok=True)
                 except (WorkspaceError, OSError) as exc:
-                    logger.warning("cannot remove the PDF of %s: %s", document_id, exc)
+                    logger.warning("cannot remove the file of %s: %s", document_id, exc)
         self._catalog.record_event(
             "deleted",
             document_id,
@@ -338,11 +345,14 @@ class Indexer:
         if document is None or document.status is not DocumentStatus.QUARANTINED:
             raise IndexingError(f"document {document_id!r} is not quarantined")
         try:
-            source = self._workspace.document_path(document.content_hash, Area.QUARANTINE)
-            if source.is_file():
-                os.replace(source, self._workspace.document_path(document.content_hash))
+            held = self._workspace.stored_document(document.content_hash, Area.QUARANTINE)
+            if held is not None:
+                os.replace(
+                    held,
+                    self._workspace.document_path(document.content_hash, suffix=held.suffix),
+                )
         except (WorkspaceError, OSError) as exc:
-            raise IndexingError(f"cannot restore the PDF of {document_id!r}: {exc}") from exc
+            raise IndexingError(f"cannot restore the file of {document_id!r}: {exc}") from exc
         self._catalog.set_status(document_id, DocumentStatus.ACTIVE)
         self._catalog.record_event("released", document_id, content_hash=document.content_hash)
         audit_logger.info("event=release document_id=%s", document_id)
@@ -359,13 +369,16 @@ class Indexer:
         self._catalog.replace_content(document_id, [], [])
         self._catalog.set_status(document_id, DocumentStatus.QUARANTINED)
         try:
-            source = self._workspace.document_path(document.content_hash)
-            if source.is_file():
+            live = self._workspace.stored_document(document.content_hash)
+            if live is not None:
                 os.replace(
-                    source, self._workspace.document_path(document.content_hash, Area.QUARANTINE)
+                    live,
+                    self._workspace.document_path(
+                        document.content_hash, Area.QUARANTINE, live.suffix
+                    ),
                 )
         except (WorkspaceError, OSError) as exc:
-            logger.warning("cannot move the PDF of %s to quarantine: %s", document_id, exc)
+            logger.warning("cannot move the file of %s to quarantine: %s", document_id, exc)
         self._catalog.record_event(
             "quarantined", document_id, content_hash=document.content_hash, detail=reason
         )

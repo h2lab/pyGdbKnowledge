@@ -11,7 +11,10 @@ from pathlib import Path
 import uvicorn
 
 from .config import ConfigError, Settings, load_settings
-from .ingestion.importer import DocumentMetadata, IngestError, import_pdf
+from .corpus.fetch import Fetcher, HttpFetcher
+from .corpus.manifest import CorpusError, load_manifest
+from .corpus.sync import LockFile, plan_sync, run_sync
+from .ingestion.importer import DocumentMetadata, IngestError, import_document
 from .ingestion.pipeline import BatchReport, Indexer, IndexingError
 from .main import configure_logging, create_app
 from .retrieval.embeddings import EmbeddingError
@@ -32,8 +35,8 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     serve = commands.add_parser("serve", help="run the HTTP API")
     serve.add_argument("--config", type=Path, help=_CONFIG_HELP)
-    ingest = commands.add_parser("ingest", help="import local PDF files into the workspace")
-    ingest.add_argument("files", nargs="+", type=Path, metavar="FILE", help="PDF files to import")
+    ingest = commands.add_parser("ingest", help="import local PDF or SVD files")
+    ingest.add_argument("files", nargs="+", type=Path, metavar="FILE", help="PDF or SVD files")
     ingest.add_argument("--config", type=Path, help=_CONFIG_HELP)
     ingest.add_argument(
         "--source-type",
@@ -74,6 +77,16 @@ def _parser() -> argparse.ArgumentParser:
     audit.add_argument("document", nargs="?", metavar="DOCUMENT_ID")
     audit.add_argument("--limit", type=int, default=100)
     audit.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    sync = commands.add_parser(
+        "sync", help="download the documents listed in the corpus manifest and import them"
+    )
+    sync.add_argument("--manifest", type=Path, default=Path("config/corpus.yaml"))
+    sync.add_argument("--lock", type=Path, help="lock file (default: corpus.lock.json beside it)")
+    sync.add_argument("--source", help="only synchronize this source of the manifest")
+    sync.add_argument("--dry-run", action="store_true", help="list what would be downloaded")
+    sync.add_argument("--limit", type=int, help="stop after this many downloads")
+    sync.add_argument("--index", action="store_true", help="index the imported documents")
+    sync.add_argument("--config", type=Path, help=_CONFIG_HELP)
     return parser
 
 
@@ -191,7 +204,7 @@ def _ingest(args: argparse.Namespace) -> int:
     imported: list[str] = []
     for path in args.files:
         try:
-            result = import_pdf(
+            result = import_document(
                 workspace, catalog, path, metadata, settings.limits.max_upload_bytes
             )
         except (IngestError, CatalogError) as exc:
@@ -206,6 +219,49 @@ def _ingest(args: argparse.Namespace) -> int:
         if indexer is None:
             return 1
         failures += _print_report(indexer.index_documents(imported))
+    return 1 if failures else 0
+
+
+def _sync(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
+    opened = _open(args.config)
+    if opened is None:
+        return 1
+    settings, workspace, catalog = opened
+    max_bytes = settings.limits.max_upload_bytes
+    try:
+        manifest = load_manifest(args.manifest)
+        lock = LockFile(args.lock or args.manifest.with_name("corpus.lock.json"))
+        client = fetcher or HttpFetcher(
+            manifest.allowed_domains, manifest.timeout_s, manifest.request_delay_s
+        )
+        plans = plan_sync(manifest, client, max_bytes, args.source)
+        report = run_sync(
+            plans,
+            lock,
+            workspace,
+            catalog,
+            client,
+            max_bytes,
+            dry_run=args.dry_run,
+            limit=args.limit,
+        )
+    except CorpusError as exc:
+        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        return 1
+    for url in report.planned:
+        print(f"would download: {url}")
+    for url, message in report.failed.items():
+        print(f"pyGdbKnowledge: {url}: {message}", file=sys.stderr)
+    print(
+        f"sync: {len(report.imported)} imported, {len(report.skipped)} already present, "
+        f"{len(report.planned)} planned, {len(report.failed)} failed"
+    )
+    failures = len(report.failed)
+    if args.index and report.imported:
+        indexer = _indexer(settings, workspace, catalog)
+        if indexer is None:
+            return 1
+        failures += _print_report(indexer.index_documents(report.imported))
     return 1 if failures else 0
 
 
@@ -254,4 +310,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _release(args)
     if args.command == "audit":
         return _audit(args)
+    if args.command == "sync":
+        return _sync(args)
     raise AssertionError(f"unhandled command {args.command!r}")

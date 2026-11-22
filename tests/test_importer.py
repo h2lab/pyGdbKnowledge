@@ -66,7 +66,7 @@ def test_duplicate_content_is_not_stored_twice(
 
 @pytest.mark.parametrize(
     ("data", "limit", "message"),
-    [(b"MZ not a pdf", 10_000, "not a PDF"), (PDF, 5, "exceeds")],
+    [(b"MZ not a pdf", 10_000, "unsupported file type"), (PDF, 5, "exceeds")],
 )
 def test_invalid_files_are_rejected(
     tmp_path: Path,
@@ -114,5 +114,5 @@ def test_cli_ingest(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert "already present" in capsys.readouterr().out
     bad = _pdf(tmp_path, "bad.pdf", b"nope")
     assert cli.main([*base, str(bad)]) == 1
-    assert "not a PDF" in capsys.readouterr().err
+    assert "unsupported file type" in capsys.readouterr().err
     assert cli.main([*base, "--title", "T", str(good), str(bad)]) == 2

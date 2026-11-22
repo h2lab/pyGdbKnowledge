@@ -88,9 +88,13 @@ Workspace layout:
   checks (hidden text, injection patterns), quarantine area, lifecycle audit trail (id,
   source, date, version, SHA-256, channel, validation status, chunk/vector ids), fast removal
   of a document/batch/source with all derived data, retrievability test after removal.
-- [ ] **19. Corpus manifest (optional)**: `config/corpus.yaml` (URL, expected SHA-256,
-  metadata) and `pyGdbKnowledge sync`: downloads what is missing, verifies the hash, ingests.
-  Explicit allowed domains, never triggered by the agent.
+- [ ] **19. Corpus manifest and SVD support**: `config/corpus.yaml` (allowed domains, sources,
+  optional SHA-256, metadata) and `pyGdbKnowledge sync` (`--dry-run`, `--source`, `--limit`,
+  `--index`): downloads what is missing, verifies the hash (manifest, else lock file written on
+  first download), imports. HTTPS only, allow-listed hosts including redirects, never triggered
+  by the API. Two initial corpora: `cmsis-svd/cmsis-svd-data` (SVD files, vendor, pinned commit)
+  and `www.st.com` (explicit list of official documents). SVD import, parsing and chunking
+  (one section per peripheral, registers and bit fields).
 
 ## Quality and operations
 

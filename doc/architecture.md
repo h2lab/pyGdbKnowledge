@@ -71,8 +71,17 @@ local file -> validation + SHA-256 + duplicate/version detection
 ```
 
 - Documents are loaded explicitly (CLI or admin endpoint), never fetched by agent tools.
-  `source_url` is provenance metadata only. An optional corpus manifest can later download
-  documents from allowed domains, verifying a pinned SHA-256.
+  `source_url` is provenance metadata only.
+- Two formats are accepted: PDF and CMSIS-SVD (XML, stored as `<sha256>.svd`). SVD files are
+  parsed defensively (DOCTYPE and entities refused, bounded size and depth) and chunked into one
+  section per peripheral with registers, addresses, reset values and bit fields, using the same
+  `Bits 7:4 NAME: ...` notation as datasheets. The PDF-only upload endpoint refuses SVD.
+- `pyGdbKnowledge sync` (operator CLI only) reads `config/corpus.yaml`: sources are either an
+  explicit URL list (ST documents) or a GitHub repository of SVD files, pinned to a commit.
+  Downloads are HTTPS-only, limited to the manifest's allowed domains on every redirect hop,
+  size-capped, throttled and verified against the manifest SHA-256 or, failing that, the hash
+  recorded in `corpus.lock.json` on first download (trust on first use). Files then follow the
+  normal import path (screening, audit trail with channel `sync`).
 - Chunking follows document structure (sections, registers and bit fields, tables), keeps
   section path, page and peripheral context, limits overlap, and uses stable chunk ids.
 - Unknown metadata stays null; values are never invented.

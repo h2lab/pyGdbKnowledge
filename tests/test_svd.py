@@ -1,0 +1,170 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+"""Tests for SVD parsing, chunking, import and indexing."""
+
+from pathlib import Path
+
+import pytest
+
+from pyGdbKnowledge.config import IngestionSettings, Settings
+from pyGdbKnowledge.ingestion.importer import (
+    DocumentMetadata,
+    IngestError,
+    import_document,
+    import_pdf,
+)
+from pyGdbKnowledge.ingestion.pipeline import Indexer
+from pyGdbKnowledge.ingestion.svd import SvdError, chunk_svd
+from pyGdbKnowledge.retrieval.hybrid import HybridSearcher
+from pyGdbKnowledge.storage.catalog import Catalog
+from pyGdbKnowledge.storage.models import SearchFilters, SourceType
+from pyGdbKnowledge.workspace import Area, Workspace
+
+SVD = """<?xml version="1.0" encoding="utf-8"?>
+<device schemaVersion="1.3">
+  <name>STM32TEST</name>
+  <size>32</size>
+  <access>read-write</access>
+  <peripherals>
+    <peripheral>
+      <name>USART1</name>
+      <description>Universal   synchronous
+        receiver</description>
+      <baseAddress>0x40011000</baseAddress>
+      <interrupt><name>USART1</name><value>37</value></interrupt>
+      <registers>
+        <register>
+          <name>CR1</name>
+          <description>Control register 1</description>
+          <addressOffset>0x0</addressOffset>
+          <resetValue>0x0</resetValue>
+          <fields>
+            <field>
+              <name>UE</name><description>USART enable</description>
+              <bitOffset>0</bitOffset><bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>M</name><description>Word length</description>
+              <bitRange>[13:12]</bitRange>
+              <enumeratedValues>
+                <enumeratedValue><name>Bits8</name><value>0</value></enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <cluster>
+          <name>CH</name><addressOffset>0x100</addressOffset>
+          <register><name>CTL</name><addressOffset>0x4</addressOffset></register>
+        </cluster>
+      </registers>
+    </peripheral>
+    <peripheral derivedFrom="USART1">
+      <name>USART2</name>
+      <baseAddress>0x40004400</baseAddress>
+    </peripheral>
+  </peripherals>
+</device>
+"""
+ENTITY = """<?xml version="1.0"?>
+<!DOCTYPE device [<!ENTITY a "aaaa">]>
+<device><name>X</name></device>
+"""
+
+
+@pytest.fixture
+def svd_file(tmp_path: Path) -> Path:
+    """Write a small SVD file."""
+    path = tmp_path / "STM32TEST.svd"
+    path.write_text(SVD, encoding="utf-8")
+    return path
+
+
+def test_chunking_describes_registers_and_fields(svd_file: Path) -> None:
+    """Each peripheral is a section; registers carry addresses, fields and reset values."""
+    chunked = chunk_svd("dev-1", svd_file, IngestionSettings())
+    assert [s.title for s in chunked.sections] == ["USART1", "USART2"]
+    first = chunked.chunks[0]
+    assert first.peripheral == "USART1"
+    assert first.section_path == "STM32TEST > USART1"
+    assert "base address 0x40011000" in first.text
+    assert "Universal synchronous receiver" in first.text
+    assert "Interrupt USART1 = 37" in first.text
+    assert "Register USART1_CR1 (offset 0x0, address 0x40011000, size 32" in first.text
+    assert "reset 0x00000000" in first.text
+    assert "Bits 0 UE (read-write): USART enable" in first.text
+    assert "Bits 13:12 M (read-write): Word length [values: 0=Bits8]" in first.text
+    assert "Register USART1_CH.CTL (offset 0x104, address 0x40011104" in first.text
+
+
+def test_derived_peripheral_reuses_base_registers(svd_file: Path) -> None:
+    """A derivedFrom peripheral gets the base registers at its own address."""
+    chunked = chunk_svd("dev-1", svd_file, IngestionSettings())
+    text = "\n".join(c.text for c in chunked.chunks if c.peripheral == "USART2")
+    assert "Same registers as USART1" in text
+    assert "Register USART2_CR1 (offset 0x0, address 0x40004400" in text
+
+
+def test_large_peripheral_is_split_within_the_chunk_limit(tmp_path: Path) -> None:
+    """Registers are packed into chunks no larger than the configured size."""
+    registers = "".join(
+        f"<register><name>R{i}</name><description>{'word ' * 20}</description>"
+        f"<addressOffset>{i * 4}</addressOffset></register>"
+        for i in range(60)
+    )
+    path = tmp_path / "big.svd"
+    path.write_text(
+        "<device><name>D</name><peripherals><peripheral><name>P</name>"
+        f"<baseAddress>0</baseAddress><registers>{registers}</registers></peripheral>"
+        "</peripherals></device>",
+        encoding="utf-8",
+    )
+    settings = IngestionSettings(chunk_max_chars=800, chunk_overlap_chars=0)
+    chunks = chunk_svd("big-1", path, settings).chunks
+    assert len(chunks) > 3
+    assert all(len(c.text) <= 800 + 200 for c in chunks)
+    assert len({c.chunk_id for c in chunks}) == len(chunks)
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [(ENTITY, "DOCTYPE"), ("<device><name>", "invalid XML"), ("<other/>", "not an SVD")],
+)
+def test_unsafe_or_malformed_svd_is_refused(tmp_path: Path, content: str, message: str) -> None:
+    """DTDs, broken XML and foreign documents are rejected."""
+    path = tmp_path / "bad.svd"
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises(SvdError, match=message):
+        chunk_svd("bad-1", path, IngestionSettings())
+
+
+def test_import_and_index_svd(svd_file: Path, tmp_path: Path) -> None:
+    """An SVD file is stored as .svd, indexed, searchable by peripheral, and deletable."""
+    settings = Settings(workspace=tmp_path / "ws")
+    workspace = Workspace(settings.workspace)
+    catalog = Catalog(workspace.catalog_path)
+    meta = DocumentMetadata(
+        source_type=SourceType.VENDOR, manufacturer="STMicroelectronics", document_type="svd"
+    )
+    document = import_document(workspace, catalog, svd_file, meta, 10_000_000).document
+    stored = workspace.stored_document(document.content_hash)
+    assert stored is not None and stored.suffix == ".svd"
+    indexer = Indexer(settings, workspace, catalog)
+    result = indexer.index_document(document.document_id)
+    assert result.sections == 2 and result.chunks >= 2
+    hits = HybridSearcher(catalog).search(
+        "USART1_CR1 enable", SearchFilters(peripheral="usart1"), 5
+    )
+    assert hits and hits[0].chunk.peripheral == "USART1"
+    assert indexer.delete_document(document.document_id)
+    assert workspace.stored_document(document.content_hash) is None
+    assert not workspace.document_path(document.content_hash, Area.QUARANTINE).exists()
+
+
+def test_pdf_only_import_refuses_svd(svd_file: Path, tmp_path: Path) -> None:
+    """The upload path (PDF only) does not accept SVD files."""
+    workspace = Workspace(tmp_path / "ws")
+    catalog = Catalog(workspace.catalog_path)
+    meta = DocumentMetadata(source_type=SourceType.VENDOR)
+    with pytest.raises(IngestError, match="unsupported file type"):
+        import_pdf(workspace, catalog, svd_file, meta, 10_000_000)

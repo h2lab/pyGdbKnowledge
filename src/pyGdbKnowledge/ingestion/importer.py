@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-"""Import of PDF files into the workspace (explicit, local, deduplicated by SHA-256)."""
+"""Import of PDF and SVD files into the workspace (explicit, local, deduplicated by SHA-256)."""
 
 import hashlib
 import os
@@ -16,8 +16,9 @@ from pydantic import ValidationError
 
 from ..storage.catalog import Catalog, DuplicateDocumentError
 from ..storage.models import Document, DocumentStatus, SourceType
-from ..workspace import Area, Workspace
+from ..workspace import DOCUMENT_SUFFIXES, Area, Workspace
 from .screening import screen_metadata
+from .svd import SVD_MAGIC
 
 PDF_MAGIC = b"%PDF-"
 _MAGIC_WINDOW = 1024
@@ -66,6 +67,15 @@ def _check_source_url(url: str | None) -> None:
         raise IngestError("source_url must be an http(s) URL")
 
 
+def _detect_suffix(head: bytes) -> str | None:
+    """Return the storage suffix matching the file signature, or None if unsupported."""
+    if PDF_MAGIC in head:
+        return ".pdf"
+    if SVD_MAGIC in head.lstrip(b"\xef\xbb\xbf \t\r\n")[:_MAGIC_WINDOW]:
+        return ".svd"
+    return None
+
+
 def import_pdf(
     workspace: Workspace,
     catalog: Catalog,
@@ -74,11 +84,24 @@ def import_pdf(
     max_bytes: int,
     channel: str = "cli",
 ) -> ImportResult:
-    """Copy a PDF into the workspace and register it in the catalog.
+    """Import a PDF file only (see ``import_document``)."""
+    return import_document(workspace, catalog, source, metadata, max_bytes, channel, (".pdf",))
+
+
+def import_document(
+    workspace: Workspace,
+    catalog: Catalog,
+    source: Path,
+    metadata: DocumentMetadata,
+    max_bytes: int,
+    channel: str = "cli",
+    formats: tuple[str, ...] = DOCUMENT_SUFFIXES,
+) -> ImportResult:
+    """Copy a PDF or SVD file into the workspace and register it in the catalog.
 
     The content is streamed to ``tmp/`` under a size cap while its SHA-256 is computed, checked
-    for the PDF signature, then moved to ``documents/<sha256>.pdf`` (mode 0600). A file whose
-    hash is already known is not stored again. Text extraction is a separate step.
+    for a PDF or SVD signature, then moved to ``documents/<sha256>.<pdf|svd>`` (mode 0600). A
+    file whose hash is already known is not stored again. Text extraction is a separate step.
 
     Parameters
     ----------
@@ -94,6 +117,8 @@ def import_pdf(
         Maximum accepted file size.
     channel : str
         Import channel recorded in the audit trail (for example ``cli`` or ``upload``).
+    formats : tuple[str, ...]
+        Accepted storage suffixes among ``.pdf`` and ``.svd``.
 
     Returns
     -------
@@ -103,7 +128,7 @@ def import_pdf(
     Raises
     ------
     IngestError
-        If the source is not a regular PDF within the size limit, or the metadata is invalid.
+        If the source is not a regular PDF or SVD file within the size limit, or the metadata is invalid.
     """
     _check_source_url(metadata.source_url)
     suspicious = screen_metadata(
@@ -143,8 +168,9 @@ def import_pdf(
                     head = (head + block)[:_MAGIC_WINDOW]
                 digest.update(block)
                 out.write(block)
-        if PDF_MAGIC not in head:
-            raise IngestError(f"not a PDF file: {source}")
+        suffix = _detect_suffix(head)
+        if suffix is None or suffix not in formats:
+            raise IngestError(f"unsupported file type ({'/'.join(formats)} expected): {source}")
         sha256 = digest.hexdigest()
         existing = catalog.get_document_by_hash(sha256)
         if existing is not None:
@@ -167,7 +193,7 @@ def import_pdf(
             )
         except ValidationError as exc:
             raise IngestError(f"invalid metadata: {exc.errors()[0]['loc']}") from exc
-        target = workspace.document_path(sha256)
+        target = workspace.document_path(sha256, suffix=suffix)
         tmp_path.chmod(0o600)
         os.replace(tmp_path, target)
         try:

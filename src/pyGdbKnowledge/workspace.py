@@ -11,6 +11,7 @@ from pathlib import Path
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _DIR_MODE = 0o700
+DOCUMENT_SUFFIXES = (".pdf", ".svd")
 
 
 class WorkspaceError(Exception):
@@ -121,8 +122,8 @@ class Workspace:
             raise WorkspaceError("path escapes the workspace area")
         return target
 
-    def document_path(self, sha256: str, area: Area = Area.DOCUMENTS) -> Path:
-        """Return the storage path of a PDF named by its SHA-256.
+    def document_path(self, sha256: str, area: Area = Area.DOCUMENTS, suffix: str = ".pdf") -> Path:
+        """Return the storage path of a document named by its SHA-256.
 
         Parameters
         ----------
@@ -130,11 +131,13 @@ class Workspace:
             Lowercase hexadecimal SHA-256 of the file content.
         area : Area
             ``DOCUMENTS`` or ``QUARANTINE``.
+        suffix : str
+            One of ``.pdf`` and ``.svd``.
 
         Returns
         -------
         Path
-            ``<area>/<sha256>.pdf``.
+            ``<area>/<sha256><suffix>``.
 
         Raises
         ------
@@ -145,4 +148,14 @@ class Workspace:
             raise WorkspaceError(f"area {area.value!r} does not store documents")
         if not _SHA256_RE.fullmatch(sha256):
             raise WorkspaceError("invalid SHA-256 digest")
-        return self.area(area) / f"{sha256}.pdf"
+        if suffix not in DOCUMENT_SUFFIXES:
+            raise WorkspaceError(f"unsupported document suffix {suffix!r}")
+        return self.area(area) / f"{sha256}{suffix}"
+
+    def stored_document(self, sha256: str, area: Area = Area.DOCUMENTS) -> Path | None:
+        """Return the stored file of a document whatever its format, or None if absent."""
+        for suffix in DOCUMENT_SUFFIXES:
+            path = self.document_path(sha256, area, suffix)
+            if path.is_file():
+                return path
+        return None

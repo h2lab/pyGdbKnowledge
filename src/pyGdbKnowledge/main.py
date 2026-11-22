@@ -12,8 +12,9 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 
 from . import __version__
-from .api import health
+from .api import documents, health
 from .config import Settings
+from .storage.catalog import Catalog
 from .workspace import Workspace
 
 API_PREFIX = "/api/v1"
@@ -62,6 +63,7 @@ def create_app(settings: Settings, workspace: Workspace) -> FastAPI:
     )
     app.state.settings = settings
     app.state.workspace = workspace
+    app.state.catalog = Catalog(workspace.catalog_path)
 
     @app.middleware("http")
     async def correlation_id(
@@ -83,4 +85,5 @@ def create_app(settings: Settings, workspace: Workspace) -> FastAPI:
         return response
 
     app.include_router(health.router, prefix=API_PREFIX)
+    app.include_router(documents.router, prefix=API_PREFIX)
     return app

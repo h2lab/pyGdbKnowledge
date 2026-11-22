@@ -288,11 +288,14 @@ class Catalog:
         except sqlite3.IntegrityError as exc:
             raise CatalogError(f"inconsistent content for {document_id!r}: {exc}") from exc
 
-    def list_sections(self, document_id: str) -> list[Section]:
-        """Return the sections of a document in reading order."""
+    def list_sections(
+        self, document_id: str, limit: int | None = None, offset: int = 0
+    ) -> list[Section]:
+        """Return the sections of a document in reading order, optionally paginated."""
         with self._connect() as db:
             rows = db.execute(
-                "SELECT * FROM sections WHERE document_id = ? ORDER BY ordinal", (document_id,)
+                "SELECT * FROM sections WHERE document_id = ? ORDER BY ordinal LIMIT ? OFFSET ?",
+                (document_id, -1 if limit is None else limit, offset),
             ).fetchall()
         return [Section(**dict(row)) for row in rows]
 

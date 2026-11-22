@@ -12,6 +12,7 @@ import uvicorn
 
 from .config import ConfigError, load_settings
 from .main import configure_logging, create_app
+from .storage.catalog import CatalogError
 from .workspace import Workspace, WorkspaceError
 
 
@@ -34,12 +35,13 @@ def _serve(config: Path | None) -> int:
     try:
         settings = load_settings(config)
         workspace = Workspace(settings.workspace)
-    except (ConfigError, WorkspaceError) as exc:
+        app = create_app(settings, workspace)
+    except (ConfigError, WorkspaceError, CatalogError) as exc:
         print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
         return 1
     configure_logging(settings.log_level)
     uvicorn.run(
-        create_app(settings, workspace),
+        app,
         host=settings.server.host,
         port=settings.server.port,
         log_config=None,

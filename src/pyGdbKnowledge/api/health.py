@@ -1,12 +1,17 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-"""Health endpoint."""
+"""Health and statistics endpoints."""
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from .. import __version__
+from ..storage.catalog import Catalog
+from ..storage.models import CatalogStats
+from .deps import get_catalog
 
 router = APIRouter()
 
@@ -28,3 +33,9 @@ def health() -> HealthResponse:
         Status and service version; no corpus or configuration detail is disclosed.
     """
     return HealthResponse(status="ok", version=__version__)
+
+
+@router.get("/stats", response_model=CatalogStats)
+def stats(catalog: Annotated[Catalog, Depends(get_catalog)]) -> CatalogStats:
+    """Return catalog counters (schema version, documents, sections, chunks)."""
+    return catalog.stats()

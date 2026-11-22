@@ -5,8 +5,8 @@
 
 from pathlib import Path
 
-import pymupdf
 import pytest
+from pdfmaker import make_pdf
 
 from pyGdbKnowledge import cli
 from pyGdbKnowledge.config import Settings
@@ -32,12 +32,7 @@ class _FailingStore(InMemoryVectorStore):
 
 
 def _pdf(path: Path, text: str = "USART_ISR flags and baud rate") -> Path:
-    document = pymupdf.open()
-    document.new_page().insert_text((72, 120), text)
-    document.set_toc([[1, "1 USART", 1]])
-    document.save(path)
-    document.close()
-    return path
+    return make_pdf(path, [text], [[1, "1 USART", 1]])
 
 
 @pytest.fixture

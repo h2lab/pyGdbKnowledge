@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-"""Text and structure extraction from PDF files (PyMuPDF, behind the ``pdf`` extra).
+"""Text and structure extraction from PDF files (pypdf, behind the ``pdf`` extra).
 
 PDF files are untrusted input: parsing is bounded in pages and characters, encrypted files
 are refused, and control characters are removed from the extracted text.
@@ -24,6 +24,8 @@ _HEADER_LINES = 4
 _FOOTER_LINES = 3
 _MIN_PAGES_FOR_HEADERS = 4
 _HEADER_SHARE = 0.3
+_MAX_OUTLINE_ENTRIES = 20_000
+_MAX_OUTLINE_DEPTH = 12
 
 
 class ExtractionError(Exception):
@@ -153,6 +155,39 @@ def build_sections(outline: list[tuple[int, str, int]], page_count: int) -> list
     return sections
 
 
+def _read_title(reader: Any) -> str | None:
+    try:
+        title = reader.metadata.title if reader.metadata else None
+    except Exception:
+        return None
+    return str(title) if title else None
+
+
+def _read_outline(reader: Any) -> list[tuple[int, str, int]]:
+    entries: list[tuple[int, str, int]] = []
+
+    def walk(items: list[Any], level: int) -> None:
+        for item in items:
+            if len(entries) >= _MAX_OUTLINE_ENTRIES:
+                return
+            if isinstance(item, list):
+                if level < _MAX_OUTLINE_DEPTH:
+                    walk(item, level + 1)
+                continue
+            try:
+                entries.append(
+                    (level, str(item.title), int(reader.get_destination_page_number(item)) + 1)
+                )
+            except Exception:  # broken destinations are skipped
+                continue
+
+    try:
+        walk(list(reader.outline), 1)
+    except Exception:
+        return []
+    return entries
+
+
 def extract_pdf(path: Path, settings: IngestionSettings) -> ExtractedDocument:
     """Extract page text and outline sections from a PDF.
 
@@ -171,42 +206,39 @@ def extract_pdf(path: Path, settings: IngestionSettings) -> ExtractedDocument:
     Raises
     ------
     ExtractionError
-        If PyMuPDF is missing, the file is unreadable, encrypted or beyond the bounds.
+        If pypdf is missing, the file is unreadable, encrypted or beyond the bounds.
     """
     try:
-        pymupdf: Any = importlib.import_module("pymupdf")
+        pypdf: Any = importlib.import_module("pypdf")
     except ImportError as exc:
-        raise ExtractionError("PyMuPDF is not installed; install the 'pdf' extra") from exc
+        raise ExtractionError("pypdf is not installed; install the 'pdf' extra") from exc
     try:
-        document = pymupdf.open(path)
+        with path.open("rb") as stream:
+            reader = pypdf.PdfReader(stream)
+            if reader.is_encrypted:
+                raise ExtractionError("encrypted PDF files are not supported")
+            page_count = len(reader.pages)
+            if page_count < 1:
+                raise ExtractionError("the PDF has no pages")
+            if page_count > settings.max_pages:
+                raise ExtractionError(f"the PDF has more than {settings.max_pages} pages")
+            raw_pages: list[list[str]] = []
+            total = 0
+            for index in range(page_count):
+                try:
+                    text = clean_text(reader.pages[index].extract_text() or "")
+                except Exception as exc:
+                    raise ExtractionError(f"cannot read page {index + 1}: {exc}") from exc
+                total += len(text)
+                if total > settings.max_chars:
+                    raise ExtractionError("the extracted text exceeds the configured size limit")
+                raw_pages.append(text.splitlines())
+            outline = _read_outline(reader)
+            title = _read_title(reader)
+    except ExtractionError:
+        raise
     except Exception as exc:  # the library raises many unrelated types on malformed input
-        raise ExtractionError(f"cannot open PDF: {exc}") from exc
-    try:
-        if document.needs_pass or document.is_encrypted:
-            raise ExtractionError("encrypted PDF files are not supported")
-        page_count = int(document.page_count)
-        if page_count < 1:
-            raise ExtractionError("the PDF has no pages")
-        if page_count > settings.max_pages:
-            raise ExtractionError(f"the PDF has more than {settings.max_pages} pages")
-        raw_pages: list[list[str]] = []
-        total = 0
-        for index in range(page_count):
-            try:
-                text = clean_text(document[index].get_text())
-            except Exception as exc:
-                raise ExtractionError(f"cannot read page {index + 1}: {exc}") from exc
-            total += len(text)
-            if total > settings.max_chars:
-                raise ExtractionError("the extracted text exceeds the configured size limit")
-            raw_pages.append(text.splitlines())
-        try:
-            outline = [(int(lv), str(title), int(pg)) for lv, title, pg in document.get_toc()]
-        except Exception:
-            outline = []
-        title = (document.metadata or {}).get("title") or None
-    finally:
-        document.close()
+        raise ExtractionError(f"cannot read PDF: {exc}") from exc
     pages = tuple(
         ExtractedPage(number, clean_text("\n".join(lines)))
         for number, lines in enumerate(strip_running_headers(raw_pages), start=1)

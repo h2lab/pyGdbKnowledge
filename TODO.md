@@ -75,7 +75,7 @@ Workspace layout:
   versions, copy into `workspace/documents/`, explicitly provided metadata.
   CLI `pyGdbKnowledge ingest file.pdf --manufacturer ... --device ... --document-type ...
   --revision ... --source-url ...` (`--source-url` is provenance only, no download).
-- [ ] **13. PDF extraction**: PyMuPDF page by page, titles and sections, tests on a generated
+- [ ] **13. PDF extraction**: pypdf page by page, titles and sections, tests on a generated
   PDF.
 - [ ] **14. Technical chunking**: per section with path and page, registers/bit fields,
   preserved tables, limited overlap, stable chunk/document ids + hash + version.

@@ -34,7 +34,7 @@ agent tools (pyGdbToolkit) --HTTP/JSON--> Knowledge API (FastAPI)
 | Catalog / exact search | SQLite + FTS5 | Metadata, register names, addresses, error codes |
 | Vector search | Qdrant (separate container) | Semantic similarity with metadata filters |
 | Embeddings | Local model (sentence-transformers or Ollama) | Passage and query vectors |
-| PDF | PyMuPDF; optional OCR and advanced layout parsing | Text, pages, sections, tables |
+| PDF | pypdf (BSD, no AGPL dependency); optional OCR and advanced layout parsing | Text, pages, sections, tables |
 
 No Kubernetes, Kafka, Elasticsearch or PostgreSQL: SQLite/FTS5 is enough for the catalog and
 exact search.

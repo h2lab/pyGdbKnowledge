@@ -5,8 +5,8 @@
 
 from pathlib import Path
 
-import pymupdf
 import pytest
+from pdfmaker import make_pdf
 
 from pyGdbKnowledge.config import IngestionSettings
 from pyGdbKnowledge.ingestion.extract import (
@@ -27,31 +27,17 @@ def _make_pdf(
     *,
     running_header: bool = False,
 ) -> Path:
-    document = pymupdf.open()
-    for number, body in enumerate(bodies, start=1):
-        page = document.new_page()
-        if running_header:
-            page.insert_text((72, 40), f"DS999 Rev 3 - page {number}/{len(bodies)}")
-            page.insert_text((72, 800), "ACME Confidential")
-        page.insert_text((72, 120), body)
-    if toc:
-        document.set_toc(toc)
-    document.save(path)
-    document.close()
-    return path
+    return make_pdf(path, bodies, toc, running_header=running_header)
 
 
 def test_extracts_pages_title_and_outline(tmp_path: Path) -> None:
     """Page text, document title and outline sections are returned."""
-    document = pymupdf.open()
-    for body in ("USART_ISR register", "SPI chapter", "end"):
-        document.new_page().insert_text((72, 120), body)
-    document.set_toc([[1, "1 USART", 1], [2, "1.1 Registers", 1], [1, "2 SPI", 2]])
-    document.set_metadata({"title": "Sample datasheet"})
-    path = tmp_path / "a.pdf"
-    document.save(path)
-    document.close()
-
+    path = make_pdf(
+        tmp_path / "a.pdf",
+        ["USART_ISR register", "SPI chapter", "end"],
+        [[1, "1 USART", 1], [2, "1.1 Registers", 1], [1, "2 SPI", 2]],
+        title="Sample datasheet",
+    )
     result = extract_pdf(path, SETTINGS)
     assert result.title == "Sample datasheet"
     assert result.page_count == 3
@@ -66,12 +52,12 @@ def test_extracts_pages_title_and_outline(tmp_path: Path) -> None:
 
 def test_running_headers_and_footers_are_removed(tmp_path: Path) -> None:
     """Lines repeated on many pages (page counters included) are dropped."""
-    words = [f"w{chr(97 + k)}" for k in range(26)]
-    bodies = ["\n".join(words[3 * i + k] * 3 for k in range(6)) for i in range(6)]
+    words = [[f"{chr(97 + i)}{chr(97 + k)}" * 3 for k in range(6)] for i in range(6)]
+    bodies = ["\n".join(row) for row in words]
     path = _make_pdf(tmp_path / "h.pdf", bodies, running_header=True)
     result = extract_pdf(path, SETTINGS)
     for index, page in enumerate(result.pages):
-        assert words[3 * index + 5] * 3 in page.text
+        assert all(word in page.text for word in words[index])
         assert "DS999" not in page.text and "Confidential" not in page.text
 
 
@@ -96,11 +82,7 @@ def test_malformed_and_encrypted_files_are_refused(tmp_path: Path) -> None:
     broken.write_bytes(b"%PDF-1.7\nnot really a pdf")
     with pytest.raises(ExtractionError):
         extract_pdf(broken, SETTINGS)
-    plain = _make_pdf(tmp_path / "p.pdf", ["secret"])
-    locked = tmp_path / "locked.pdf"
-    document = pymupdf.open(plain)
-    document.save(locked, encryption=pymupdf.PDF_ENCRYPT_AES_256, owner_pw="o", user_pw="u")
-    document.close()
+    locked = make_pdf(tmp_path / "locked.pdf", ["secret"], password="u")
     with pytest.raises(ExtractionError, match="encrypted"):
         extract_pdf(locked, SETTINGS)
 

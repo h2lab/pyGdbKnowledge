@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+# Example configuration. Every key can be overridden with an environment variable
+# PYGDBKNOWLEDGE__<SECTION>__<KEY>, e.g. PYGDBKNOWLEDGE__SERVER__PORT=9000.
+# Keep tokens out of this file: set PYGDBKNOWLEDGE__AUTH__READ_TOKEN and
+# PYGDBKNOWLEDGE__AUTH__ADMIN_TOKEN in the environment (distinct values).
+
+workspace: /var/lib/pygdbknowledge
+log_level: INFO
+
+server:
+  host: 127.0.0.1
+  port: 8080
+
+qdrant:
+  url: http://127.0.0.1:6333
+  collection: knowledge
+
+embeddings:
+  model: BAAI/bge-m3
+
+limits:
+  max_results: 20
+  default_results: 8
+  max_text_chars: 4000
+  max_query_chars: 500
+  min_score: 0.0
+  request_timeout_s: 20
+  rate_limit_per_minute: 120
+  max_upload_bytes: 209715200

@@ -68,6 +68,13 @@ class AuthSettings(_Section):
         return self
 
 
+class IngestionSettings(_Section):
+    """Bounds applied while parsing untrusted PDF files (ANSSI R18, R22)."""
+
+    max_pages: int = Field(default=5000, ge=1)
+    max_chars: int = Field(default=40_000_000, ge=1000)
+
+
 class LimitSettings(_Section):
     """Bounds applied to every exposed interface (ANSSI R18, R29)."""
 
@@ -96,6 +103,7 @@ class Settings(_Section):
     qdrant: QdrantSettings = QdrantSettings()
     embeddings: EmbeddingSettings = EmbeddingSettings()
     auth: AuthSettings = AuthSettings()
+    ingestion: IngestionSettings = IngestionSettings()
     limits: LimitSettings = LimitSettings()
 
     @model_validator(mode="after")

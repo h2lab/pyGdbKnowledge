@@ -61,6 +61,7 @@ dev = [
     "mypy",
     "pytest",
     "pytest-cov",
+    "qdrant-client>=1.12",
     "types-PyYAML",
 ]
 

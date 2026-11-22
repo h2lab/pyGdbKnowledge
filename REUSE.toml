@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+version = 1
+SPDX-PackageName = "pyGdbKnowledge"
+SPDX-PackageSupplier = "H2Lab"
+SPDX-PackageDownloadLocation = "https://github.com/h2lab/pyGdbKnowledge"
+
+[[annotations]]
+path = ".github/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 H2Lab Development Team"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "architecture_rag_local_pygdbtoolkit.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 H2Lab Development Team"
+SPDX-License-Identifier = "Apache-2.0"

@@ -261,6 +261,22 @@ class Catalog:
             ).fetchone()
         return None if row is None else _document(row)
 
+    def chunk_count(self, document_id: str) -> int:
+        """Return the number of chunks stored for a document."""
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT COUNT(*) FROM chunks WHERE document_id = ?", (document_id,)
+            ).fetchone()
+        return int(row[0])
+
+    def set_page_count(self, document_id: str, page_count: int) -> None:
+        """Record the page count discovered at extraction time."""
+        with self._connect() as db:
+            db.execute(
+                "UPDATE documents SET page_count = ? WHERE document_id = ?",
+                (page_count, document_id),
+            )
+
     def list_documents(self, limit: int = 50, offset: int = 0) -> list[Document]:
         """Return documents ordered by id, using bounded pagination."""
         with self._connect() as db:

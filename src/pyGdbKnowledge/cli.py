@@ -10,9 +10,13 @@ from pathlib import Path
 
 import uvicorn
 
-from .config import ConfigError, load_settings
+from .config import ConfigError, Settings, load_settings
 from .ingestion.importer import DocumentMetadata, IngestError, import_pdf
+from .ingestion.pipeline import BatchReport, Indexer, IndexingError
 from .main import configure_logging, create_app
+from .retrieval.embeddings import EmbeddingError
+from .retrieval.vector_store import VectorStoreError
+from .services import build_vector_components
 from .storage.catalog import Catalog, CatalogError
 from .storage.models import SourceType
 from .workspace import Workspace, WorkspaceError
@@ -44,20 +48,89 @@ def _parser() -> argparse.ArgumentParser:
     ingest.add_argument("--document-type", help="e.g. datasheet, reference_manual")
     ingest.add_argument("--revision")
     ingest.add_argument("--source-url", help="provenance only; the URL is never fetched")
+    ingest.add_argument("--index", action="store_true", help="index the documents after import")
+    for name, help_text in (
+        ("index", "index documents that have no index yet (all active ones by default)"),
+        ("reindex", "rebuild the index of the given documents (all by default)"),
+    ):
+        indexing = commands.add_parser(name, help=help_text)
+        indexing.add_argument("documents", nargs="*", metavar="DOCUMENT_ID")
+        indexing.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    delete = commands.add_parser("delete", help="remove a document and everything derived from it")
+    delete.add_argument("document", metavar="DOCUMENT_ID")
+    delete.add_argument("--keep-file", action="store_true", help="keep the PDF in the workspace")
+    delete.add_argument("--config", type=Path, help=_CONFIG_HELP)
     return parser
+
+
+def _open(config: Path | None) -> tuple[Settings, Workspace, Catalog] | None:
+    try:
+        settings = load_settings(config)
+        workspace = Workspace(settings.workspace)
+        return settings, workspace, Catalog(workspace.catalog_path)
+    except (ConfigError, WorkspaceError, CatalogError) as exc:
+        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        return None
+
+
+def _indexer(settings: Settings, workspace: Workspace, catalog: Catalog) -> Indexer | None:
+    try:
+        components = build_vector_components(settings)
+    except (EmbeddingError, VectorStoreError) as exc:
+        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        return None
+    embedder, store = components if components else (None, None)
+    return Indexer(settings, workspace, catalog, embedder, store)
+
+
+def _print_report(report: BatchReport) -> int:
+    for result in report.indexed:
+        print(
+            f"indexed: {result.document_id} "
+            f"({result.sections} sections, {result.chunks} chunks, {result.vectors} vectors)"
+        )
+    for document_id, message in report.failed.items():
+        print(f"pyGdbKnowledge: {document_id}: {message}", file=sys.stderr)
+    return 1 if report.failed else 0
+
+
+def _index(args: argparse.Namespace, *, rebuild: bool) -> int:
+    opened = _open(args.config)
+    if opened is None:
+        return 1
+    indexer = _indexer(*opened)
+    if indexer is None:
+        return 1
+    return _print_report(indexer.index_documents(args.documents or None, rebuild=rebuild))
+
+
+def _delete(args: argparse.Namespace) -> int:
+    opened = _open(args.config)
+    if opened is None:
+        return 1
+    indexer = _indexer(*opened)
+    if indexer is None:
+        return 1
+    try:
+        removed = indexer.delete_document(args.document, keep_file=args.keep_file)
+    except IndexingError as exc:
+        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        return 1
+    if not removed:
+        print(f"pyGdbKnowledge: unknown document {args.document!r}", file=sys.stderr)
+        return 1
+    print(f"deleted: {args.document}")
+    return 0
 
 
 def _ingest(args: argparse.Namespace) -> int:
     if args.title and len(args.files) > 1:
         print("pyGdbKnowledge: --title requires a single file", file=sys.stderr)
         return 2
-    try:
-        settings = load_settings(args.config)
-        workspace = Workspace(settings.workspace)
-        catalog = Catalog(workspace.catalog_path)
-    except (ConfigError, WorkspaceError, CatalogError) as exc:
-        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+    opened = _open(args.config)
+    if opened is None:
         return 1
+    settings, workspace, catalog = opened
     metadata = DocumentMetadata(
         source_type=SourceType(args.source_type),
         title=args.title,
@@ -69,6 +142,7 @@ def _ingest(args: argparse.Namespace) -> int:
         source_url=args.source_url,
     )
     failures = 0
+    imported: list[str] = []
     for path in args.files:
         try:
             result = import_pdf(
@@ -80,6 +154,12 @@ def _ingest(args: argparse.Namespace) -> int:
             continue
         state = "imported" if result.created else "already present"
         print(f"{state}: {result.document.document_id} ({path.name})")
+        imported.append(result.document.document_id)
+    if args.index and imported:
+        indexer = _indexer(settings, workspace, catalog)
+        if indexer is None:
+            return 1
+        failures += _print_report(indexer.index_documents(imported))
     return 1 if failures else 0
 
 
@@ -88,7 +168,7 @@ def _serve(config: Path | None) -> int:
         settings = load_settings(config)
         workspace = Workspace(settings.workspace)
         app = create_app(settings, workspace)
-    except (ConfigError, WorkspaceError, CatalogError) as exc:
+    except (ConfigError, WorkspaceError, CatalogError, EmbeddingError, VectorStoreError) as exc:
         print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
         return 1
     configure_logging(settings.log_level)
@@ -120,4 +200,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _serve(args.config)
     if args.command == "ingest":
         return _ingest(args)
+    if args.command in ("index", "reindex"):
+        return _index(args, rebuild=args.command == "reindex")
+    if args.command == "delete":
+        return _delete(args)
     raise AssertionError(f"unhandled command {args.command!r}")

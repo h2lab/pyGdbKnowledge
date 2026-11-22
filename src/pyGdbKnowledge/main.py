@@ -22,6 +22,7 @@ from .api.auth import require_read
 from .config import Settings
 from .retrieval.hybrid import HybridSearcher
 from .security import RateLimiter
+from .services import build_searcher
 from .storage.catalog import Catalog
 from .workspace import Workspace
 
@@ -59,7 +60,8 @@ def create_app(
     workspace : Workspace
         Opened workspace.
     searcher : HybridSearcher | None
-        Retrieval engine; defaults to lexical-only search over the catalog.
+        Retrieval engine; defaults to the one described by the settings (lexical only unless
+        semantic search is enabled).
 
     Returns
     -------
@@ -76,7 +78,7 @@ def create_app(
     app.state.settings = settings
     app.state.workspace = workspace
     app.state.catalog = Catalog(workspace.catalog_path)
-    app.state.searcher = searcher or HybridSearcher(app.state.catalog)
+    app.state.searcher = searcher or build_searcher(settings, app.state.catalog)
 
     limiter = RateLimiter(settings.limits.rate_limit_per_minute)
     timeout_s = settings.limits.request_timeout_s

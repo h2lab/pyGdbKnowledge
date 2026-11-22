@@ -46,6 +46,7 @@ class EmbeddingSettings(_Section):
     """
 
     model: str = "BAAI/bge-m3"
+    enabled: bool = False
     allow_download: bool = False
     batch_size: int = Field(default=16, ge=1, le=256)
     max_seq_length: int = Field(default=512, ge=16, le=8192)

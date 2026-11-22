@@ -25,7 +25,8 @@ Container: `cp .env.example .env`, set `KNOWLEDGE_READ_TOKEN` and `KNOWLEDGE_ADM
 [config/settings.yaml](../config/settings.yaml) documents every key. Pass it with `--config`
 or `PYGDBKNOWLEDGE_CONFIG`; any key can be overridden by `PYGDBKNOWLEDGE__<SECTION>__<KEY>`.
 
-- Tokens belong in the environment, never in the file. Listening on a non-loopback address
+- Tokens belong in the environment, never in the file; see the "Tokens" section of the
+  [README](../README.md) for creation, use and rotation. Listening on a non-loopback address
   requires `auth.read_token`.
 - The read token allows search and document reading; the admin token is needed for ingestion
   and deletion.

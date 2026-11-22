@@ -31,6 +31,9 @@ see [doc/operations.md](doc/operations.md) for authentication and the other comm
 
 ## Docker Compose
 
+Note that this compose file is described as an example. For production use, please update
+accordingly to your needs, and avoid such a source tree related link.
+
 The stack runs the service and Qdrant (internal network only). The API is published on
 `127.0.0.1:8080`.
 
@@ -45,6 +48,18 @@ docker compose ps                    # both services should become "healthy"
 ```
 
 Load documents (the container reads the manifest from `./config`, mounted at `/corpus`):
+
+On Linux, if the directory or manifest is not readable by the container's user (UID 10001),
+grant it access with ACLs before running `sync`:
+
+```sh
+setfacl -m u:10001:--x config
+setfacl -m u:10001:r-- config/corpus.yaml
+```
+
+This grants traversal of `config` and read access to this manifest, not to other private
+files. Repeat the file ACL for another manifest or if the file is replaced. ACL support and
+the `setfacl` utility are required.
 
 ```sh
 docker compose exec knowledge pyGdbKnowledge sync \

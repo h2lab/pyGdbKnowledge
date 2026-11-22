@@ -14,6 +14,7 @@ from ..storage.models import CatalogStats
 from .deps import get_catalog
 
 router = APIRouter()
+stats_router = APIRouter()
 
 
 class HealthResponse(BaseModel):
@@ -35,7 +36,7 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok", version=__version__)
 
 
-@router.get("/stats", response_model=CatalogStats)
+@stats_router.get("/stats", response_model=CatalogStats)
 def stats(catalog: Annotated[Catalog, Depends(get_catalog)]) -> CatalogStats:
     """Return catalog counters (schema version, documents, sections, chunks)."""
     return catalog.stats()

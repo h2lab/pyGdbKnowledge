@@ -3,6 +3,7 @@
 
 """Search endpoint: read-only retrieval of passages from untrusted documents."""
 
+import hashlib
 from datetime import datetime
 from typing import Annotated
 
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import Settings
 from ..retrieval.hybrid import HybridSearcher
+from ..security import audit_logger
 from ..storage.models import SearchFilters, SourceType
 from .deps import get_settings
 
@@ -61,6 +63,7 @@ def get_searcher(request: Request) -> HybridSearcher:
 
 @router.post("/search", response_model=SearchResponse)
 def search(
+    request: Request,
     body: SearchRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     searcher: Annotated[HybridSearcher, Depends(get_searcher)],
@@ -70,6 +73,14 @@ def search(
     query = body.query[: limits.max_query_chars]
     limit = min(body.limit or limits.default_results, limits.max_results)
     hits = searcher.search(query, body.filters, limit, limits.min_score)
+    # The query itself may be sensitive: only its size and a short digest are recorded.
+    audit_logger.info(
+        "event=search request_id=%s query_len=%d query_sha=%s returned=%s",
+        getattr(request.state, "request_id", "-"),
+        len(query),
+        hashlib.sha256(query.encode()).hexdigest()[:12],
+        ",".join(hit.chunk.chunk_id for hit in hits),
+    )
     results: list[SearchResult] = []
     for hit in hits:
         chunk, document = hit.chunk, hit.document

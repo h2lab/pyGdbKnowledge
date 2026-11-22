@@ -29,7 +29,13 @@ def test_environment_overrides_file(tmp_path: Path) -> None:
     """Environment variables win over file values and are type-coerced."""
     path = tmp_path / "s.yaml"
     path.write_text("server:\n  port: 9000\n  host: 0.0.0.0\n", encoding="utf-8")
-    settings = load_settings(path, environ={"PYGDBKNOWLEDGE__SERVER__PORT": "9100"})
+    settings = load_settings(
+        path,
+        environ={
+            "PYGDBKNOWLEDGE__SERVER__PORT": "9100",
+            "PYGDBKNOWLEDGE__AUTH__READ_TOKEN": "a-read-token",
+        },
+    )
     assert settings.server.port == 9100
     assert settings.server.host == "0.0.0.0"
 

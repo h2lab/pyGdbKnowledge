@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, m
 
 CONFIG_PATH_ENV = "PYGDBKNOWLEDGE_CONFIG"
 ENV_PREFIX = "PYGDBKNOWLEDGE__"
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
 class ConfigError(Exception):
@@ -96,6 +97,12 @@ class Settings(_Section):
     embeddings: EmbeddingSettings = EmbeddingSettings()
     auth: AuthSettings = AuthSettings()
     limits: LimitSettings = LimitSettings()
+
+    @model_validator(mode="after")
+    def _remote_requires_token(self) -> Self:
+        if self.server.host not in LOOPBACK_HOSTS and self.auth.read_token is None:
+            raise ValueError("auth.read_token is required when listening on a non-loopback address")
+        return self
 
 
 def _merge(base: dict[str, Any], key_path: list[str], value: str) -> None:

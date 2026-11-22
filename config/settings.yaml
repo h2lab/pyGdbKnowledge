@@ -30,6 +30,12 @@ ingestion:
   chunk_max_chars: 1500     # roughly 400 tokens, well below the embedding sequence limit
   chunk_overlap_chars: 150
   import_dirs: []           # server-side directories the admin API may import PDFs from
+
+ocr:
+  enabled: false            # needs the 'ocr' extra and the tesseract binary
+  language: eng             # tesseract language(s), e.g. eng+fra
+  timeout_s: 1800
+  min_chars_per_page: 40    # OCR only when the average text per page is below this
 limits:
   max_results: 20
   default_results: 8

@@ -4,8 +4,11 @@
 """Indexing pipeline: PDF file to sections, chunks, FTS5 entries and vectors."""
 
 import logging
+import os
+import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ..config import Settings
 from ..retrieval.embeddings import Embedder, EmbeddingError
@@ -13,9 +16,10 @@ from ..retrieval.vector_store import VectorRecord, VectorStore, VectorStoreError
 from ..security import audit_logger
 from ..storage.catalog import Catalog, CatalogError
 from ..storage.models import Chunk, Document, DocumentStatus
-from ..workspace import Workspace, WorkspaceError
+from ..workspace import Area, Workspace, WorkspaceError
 from .chunking import chunk_document
-from .extract import ExtractionError, extract_pdf
+from .extract import ExtractedDocument, ExtractionError, extract_pdf
+from .ocr import OcrError, needs_ocr, ocr_pdf
 
 logger = logging.getLogger("pyGdbKnowledge")
 
@@ -110,10 +114,12 @@ class Indexer:
             path = self._workspace.document_path(document.content_hash)
             if not path.is_file():
                 raise IndexingError(f"stored PDF of {document_id!r} is missing")
-            extracted = extract_pdf(path, self._settings.ingestion)
-        except (WorkspaceError, ExtractionError) as exc:
+            extracted = self._extract(path)
+        except (WorkspaceError, ExtractionError, OcrError) as exc:
             raise IndexingError(f"cannot extract {document_id!r}: {exc}") from exc
         chunked = chunk_document(document_id, extracted, self._settings.ingestion)
+        if not chunked.chunks:
+            raise IndexingError(f"no extractable text in {document_id!r} (scanned? enable OCR)")
         vectors = self._embed(document, chunked.chunks)
 
         try:
@@ -139,6 +145,21 @@ class Indexer:
             len(vectors),
         )
         return IndexResult(document_id, len(chunked.sections), len(chunked.chunks), len(vectors))
+
+    def _extract(self, path: Path) -> ExtractedDocument:
+        extracted = extract_pdf(path, self._settings.ingestion)
+        if not self._settings.ocr.enabled or not needs_ocr(extracted, self._settings.ocr):
+            return extracted
+        logger.info("text layer is sparse, running OCR")
+        fd, name = tempfile.mkstemp(dir=self._workspace.area(Area.TMP), suffix=".ocr.pdf")
+        os.close(fd)
+        scratch = Path(name)
+        scratch.unlink()  # ocrmypdf refuses to overwrite an existing output
+        try:
+            ocr_pdf(path, scratch, self._settings.ocr)
+            return extract_pdf(scratch, self._settings.ingestion)
+        finally:
+            scratch.unlink(missing_ok=True)
 
     def _embed(self, document: Document, chunks: Sequence[Chunk]) -> list[VectorRecord]:
         if self._embedder is None or self._vector_store is None:

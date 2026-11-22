@@ -105,6 +105,16 @@ class LimitSettings(_Section):
         return self
 
 
+class OcrSettings(_Section):
+    """Optional OCR of scanned PDF files, run as an external ``ocrmypdf`` process."""
+
+    enabled: bool = False
+    language: str = Field(default="eng", pattern=r"^[a-z_]{3,12}(\+[a-z_]{3,12})*$")
+    timeout_s: int = Field(default=1800, ge=10)
+    # OCR runs when the average extracted text per page is below this value.
+    min_chars_per_page: int = Field(default=40, ge=1)
+
+
 class Settings(_Section):
     """Complete service settings."""
 
@@ -115,6 +125,7 @@ class Settings(_Section):
     embeddings: EmbeddingSettings = EmbeddingSettings()
     auth: AuthSettings = AuthSettings()
     ingestion: IngestionSettings = IngestionSettings()
+    ocr: OcrSettings = OcrSettings()
     limits: LimitSettings = LimitSettings()
 
     @model_validator(mode="after")

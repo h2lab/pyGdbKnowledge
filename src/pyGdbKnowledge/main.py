@@ -17,12 +17,14 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
-from .api import documents, health, search
-from .api.auth import require_read
+from .api import admin, documents, health, search
+from .api.auth import require_admin, require_read
 from .config import Settings
+from .ingestion.pipeline import Indexer
+from .ingestion.tasks import TaskRegistry
 from .retrieval.hybrid import HybridSearcher
 from .security import RateLimiter
-from .services import build_searcher
+from .services import build_runtime
 from .storage.catalog import Catalog
 from .workspace import Workspace
 
@@ -49,7 +51,10 @@ def configure_logging(level: str) -> None:
 
 
 def create_app(
-    settings: Settings, workspace: Workspace, searcher: HybridSearcher | None = None
+    settings: Settings,
+    workspace: Workspace,
+    searcher: HybridSearcher | None = None,
+    indexer: Indexer | None = None,
 ) -> FastAPI:
     """Build the FastAPI application.
 
@@ -62,6 +67,8 @@ def create_app(
     searcher : HybridSearcher | None
         Retrieval engine; defaults to the one described by the settings (lexical only unless
         semantic search is enabled).
+    indexer : Indexer | None
+        Indexing pipeline used by the admin API; defaults to the one described by the settings.
 
     Returns
     -------
@@ -78,7 +85,10 @@ def create_app(
     app.state.settings = settings
     app.state.workspace = workspace
     app.state.catalog = Catalog(workspace.catalog_path)
-    app.state.searcher = searcher or build_searcher(settings, app.state.catalog)
+    searcher, indexer = build_runtime(settings, workspace, app.state.catalog, searcher, indexer)
+    app.state.searcher = searcher
+    app.state.indexer = indexer
+    app.state.tasks = TaskRegistry(indexer, app.state.catalog)
 
     limiter = RateLimiter(settings.limits.rate_limit_per_minute)
     timeout_s = settings.limits.request_timeout_s
@@ -143,4 +153,5 @@ def create_app(
     app.include_router(health.stats_router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(documents.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(search.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(admin.router, prefix=API_PREFIX, dependencies=[Depends(require_admin)])
     return app

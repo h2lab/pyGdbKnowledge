@@ -76,6 +76,8 @@ class IngestionSettings(_Section):
     max_chars: int = Field(default=40_000_000, ge=1000)
     chunk_max_chars: int = Field(default=1500, ge=200, le=8000)
     chunk_overlap_chars: int = Field(default=150, ge=0)
+    # Directories the admin API may import files from; empty disables server-side paths.
+    import_dirs: list[Path] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _overlap_below_half(self) -> Self:

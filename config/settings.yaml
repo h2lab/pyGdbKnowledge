@@ -29,7 +29,7 @@ ingestion:
   max_chars: 40000000
   chunk_max_chars: 1500     # roughly 400 tokens, well below the embedding sequence limit
   chunk_overlap_chars: 150
-
+  import_dirs: []           # server-side directories the admin API may import PDFs from
 limits:
   max_results: 20
   default_results: 8

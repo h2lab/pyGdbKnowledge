@@ -4,12 +4,14 @@
 """Wiring of the optional semantic components from the settings."""
 
 from .config import Settings
+from .ingestion.pipeline import Indexer
 from .retrieval.embeddings import Embedder, EmbeddingError, create_embedder
 from .retrieval.hybrid import HybridSearcher
 from .retrieval.vector_store import QdrantVectorStore, VectorStore, VectorStoreError
 from .storage.catalog import Catalog
+from .workspace import Workspace
 
-__all__ = ["EmbeddingError", "VectorStoreError", "build_searcher", "build_vector_components"]
+__all__ = ["EmbeddingError", "VectorStoreError", "build_runtime", "build_vector_components"]
 
 
 def build_vector_components(settings: Settings) -> tuple[Embedder, VectorStore] | None:
@@ -28,10 +30,23 @@ def build_vector_components(settings: Settings) -> tuple[Embedder, VectorStore] 
     return embedder, QdrantVectorStore(settings.qdrant, embedder.dimension)
 
 
-def build_searcher(settings: Settings, catalog: Catalog) -> HybridSearcher:
-    """Create the searcher: hybrid when semantic search is enabled, lexical otherwise."""
+def build_runtime(
+    settings: Settings,
+    workspace: Workspace,
+    catalog: Catalog,
+    searcher: HybridSearcher | None = None,
+    indexer: Indexer | None = None,
+) -> tuple[HybridSearcher, Indexer]:
+    """Create the searcher and the indexer, sharing one embedder and vector store.
+
+    Components that are already provided are kept; the semantic ones (model, Qdrant) are
+    only created when something is missing.
+    """
+    if searcher is not None and indexer is not None:
+        return searcher, indexer
     components = build_vector_components(settings)
-    if components is None:
-        return HybridSearcher(catalog)
-    embedder, store = components
-    return HybridSearcher(catalog, embedder, store)
+    embedder, store = components if components else (None, None)
+    return (
+        searcher or HybridSearcher(catalog, embedder, store),
+        indexer or Indexer(settings, workspace, catalog, embedder, store),
+    )

@@ -65,6 +65,11 @@ the `workspace` and `qdrant` volumes). `docker compose down -v` deletes these vo
 Semantic search requires a locally prepared model, a full reindex and a new threshold
 calibration. See [embedding model versions](doc/operations.md#embedding-model-versions).
 
+For an image built beforehand and installed outside the checkout, see
+[prebuilt image deployment](doc/operations.md#prebuilt-image-deployment).
+[Compose troubleshooting](doc/operations.md#docker-compose-startup-troubleshooting) covers
+Raspberry Pi page sizes, empty service logs, malformed grants and unapplied threshold changes.
+
 ## Tokens
 
 Named read identities and an administrative identity use distinct static bearer tokens,

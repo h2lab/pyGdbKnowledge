@@ -98,6 +98,45 @@ read-only `config/` bind mount, and `/var/lib/silicore-knowledge` is the persist
 volume. Its `documents/`, `quarantine/` and `catalog.db` survive `docker compose down`.
 `docker compose down -v` deletes the volumes and their contents.
 
+### Prebuilt image deployment
+
+The checkout is not required on the deployment host if `silicore-knowledge:latest` is already
+available in its Docker daemon. The image must match the host architecture (`linux/arm64` on a
+64-bit Raspberry Pi). Copy the Compose file, `.env.example` as `.env`, and the configuration
+files to an operator-controlled directory, for example:
+
+```text
+/opt/pygdbknowledge/
+  docker-compose.yml
+  .env
+  config/
+  models/
+  data/                 optional: used only if explicitly bind-mounted
+```
+
+The example Compose uses named `workspace` and `qdrant` volumes, **not** the host `data/`
+directory. Relative bind mounts such as `./config` and `./models` resolve from the Compose
+project directory. Keep the project name and directory consistent: changing them can select
+different named volumes and make existing data appear missing. Do not replace existing volume
+mounts with an empty `data/` directory without a planned data migration.
+
+Run the workflow commands from that directory instead of the repository root. For a prebuilt
+image, omit `knowledge.build` from the deployed Compose file and keep its `image` entry.
+Skip `docker compose build`; use `up --no-build` and do not add `--build` to one-off `run`
+commands. The local image must already be available:
+
+```sh
+cd /opt/pygdbknowledge
+docker compose config --quiet
+# After configuring a calibrated threshold and completing corpus review:
+docker compose up -d --no-build
+```
+
+Keep the deployed Compose file in sync with the reviewed repository version, including its
+environment mappings and Qdrant tag. Updating the checkout alone does not change the deployed
+copy. The image bundles `/etc/silicore-knowledge/settings.yaml`; mounting `config/` at `/corpus`
+does not automatically select `/corpus/settings.yaml` as the service configuration.
+
 ### 1. Prepare the deployment and the corpus lock
 
 Copy `.env.example` to `.env`, restrict its permissions (`chmod 600 .env`), and set distinct
@@ -260,6 +299,8 @@ Use the read token to test `/api/v1/search`. The API refuses to start with a zer
 and anonymous access is disabled. Authentication alone does not grant a document outside the
 identity's configured list.
 
+For restart loops, see [startup troubleshooting](#docker-compose-startup-troubleshooting).
+
 ### 5. Update the corpus and maintain the lock
 
 Add reviewed manifest entries to `config/corpus.yaml`, including source provenance, metadata,
@@ -300,6 +341,126 @@ import it explicitly with `ingest ... --revision REVISION --source-url URL`; it 
 separate ID when its bytes differ. Review and release it as above. Sync continues to skip that
 URL while it is catalogued. Do not delete the old document until its replacement has been
 reviewed and authorized.
+
+## Docker Compose startup troubleshooting
+
+### Service names, dependencies and empty logs
+
+`knowledge` and `qdrant` are Compose **service names**, not image names or container names.
+Use them with Compose even when the knowledge image is `silicore-knowledge:latest` and the
+container is named `pygdbknowledge-knowledge-1`:
+
+```sh
+docker compose ps -a
+docker compose logs --no-color --since 5m --tail 40 knowledge qdrant
+```
+
+If `knowledge` is `Created` and has no logs while `qdrant` is restarting, fix Qdrant first:
+`knowledge` waits for its healthy dependency and has not run yet. `Restarting (1)` alone does
+not identify a configuration error; read the startup message. Use recent, timestamped logs
+after recreating a container so an old failure is not mistaken for the current state:
+
+```sh
+docker compose logs --no-color --timestamps --since 2m --tail 20 knowledge
+```
+
+### Raspberry Pi 5: unsupported jemalloc page size
+
+Qdrant exiting with code 134 and `<jemalloc>: Unsupported system page size` indicates an
+allocator/page-size incompatibility, including on Raspberry Pi 5 kernels with 16 KiB pages.
+Check the host with `getconf PAGESIZE` (`16384` means 16 KiB).
+
+The allocator fix is included from Qdrant **1.19.0**, as
+[confirmed by the maintainer](https://github.com/qdrant/qdrant/issues/4298#issuecomment-5188844300).
+The current Compose pins `qdrant/qdrant:v1.20.2`; older deployed copies using `v1.12.4` need
+their image tag updated. Setting a jemalloc build variable in the runtime environment does not
+recompile an incompatible binary.
+
+Before upgrading storage containing collections, back it up and review the
+[Qdrant release notes](https://github.com/qdrant/qdrant/releases) and migration requirements;
+do not assume a direct jump across multiple minor releases is supported. For a new, empty
+deployment:
+
+```sh
+docker compose pull qdrant
+docker compose up -d --no-build qdrant
+docker compose logs --no-color --since 2m --tail 30 qdrant
+docker compose up -d --no-build knowledge
+```
+
+Do not use `docker compose down -v` as a startup repair: it deletes the persistent volumes.
+
+### Invalid document grants
+
+`invalid allowed_documents environment override` means the document-grant override could not
+be parsed. In `.env`, use a JSON list with quoted document IDs:
+
+```dotenv
+KNOWLEDGE_ALLOWED_DOCUMENTS='[]'
+# Alternatively, replace these placeholders with approved document IDs:
+# KNOWLEDGE_ALLOWED_DOCUMENTS='["DOCUMENT_ID_1","DOCUMENT_ID_2"]'
+```
+
+An empty list denies all documents. `KNOWLEDGE_ALLOWED_DOCUMENTS='["*"]'` explicitly grants
+all active documents, including future releases; use it only when that policy is intended.
+`[*]` is invalid: the wildcard must be quoted **inside** the list. Recreate the service after
+correcting the override; do not relax authorization to work around a parsing error.
+
+### Minimum score, environment overrides and stale containers
+
+`limits.min_score must be positive to serve; calibrate it on the corpus` means the effective
+threshold is still zero. Set a positive calibrated `KNOWLEDGE_MIN_SCORE` in `.env` and keep
+this entry under `knowledge.environment` in the deployed Compose file:
+
+```yaml
+SILICORE_KNOWLEDGE__LIMITS__MIN_SCORE: ${KNOWLEDGE_MIN_SCORE:?set KNOWLEDGE_MIN_SCORE in .env}
+```
+
+`.env` supplies Compose interpolation values; merely defining a variable there does **not**
+pass it to the container. An exported shell variable overrides the same variable in `.env`,
+so a previous `export KNOWLEDGE_MIN_SCORE=0` can keep applying zero. The zero-valued command
+prefixes in the offline workflow apply only to those commands; never use them with API startup.
+A candidate such as `0.01` is not a validated production threshold: restrict such experiments
+to isolated validation, keep reader grants empty and calibrate before enabling agent access.
+
+From the actual deployment directory, inspect only the relevant settings, without printing
+the tokens:
+
+```sh
+docker compose config --format json | python3 -c '
+import json, sys
+env = json.load(sys.stdin)["services"]["knowledge"]["environment"]
+print("Compose minimum score:", env.get("SILICORE_KNOWLEDGE__LIMITS__MIN_SCORE", "ABSENT"))
+'
+docker inspect "$(docker compose ps -a -q knowledge)" --format '{{json .Config.Env}}' \
+  | python3 -c '
+import json, sys
+for item in json.load(sys.stdin):
+    if item.startswith(("SILICORE_KNOWLEDGE__LIMITS__MIN_SCORE=", "SILICORE_KNOWLEDGE_CONFIG=")):
+        print(item)
+'
+```
+
+The inspect command assumes one `knowledge` container. A missing score line means that override
+is absent from the container; compare the Compose value with the running container's value.
+After correcting the deployed files or a conflicting shell export:
+
+```sh
+docker compose up -d --no-build --force-recreate knowledge
+docker compose ps -a
+docker compose logs --no-color --timestamps --since 2m --tail 20 knowledge
+```
+
+`docker compose restart` does not apply changed environment variables. No image rebuild is
+needed for environment-only changes. The image reads its bundled
+`/etc/silicore-knowledge/settings.yaml`; editing `/corpus/settings.yaml` has no effect unless
+`SILICORE_KNOWLEDGE_CONFIG` is explicitly changed and the file is readable by UID 10001.
+Environment overrides still take precedence over the selected YAML file. For file-access
+errors, check the bind-mount paths and the UID 10001 permissions described in the preparation
+step; do not run the service as root.
+
+Do not share full `docker compose config`, `docker inspect` or `.env` output: it can contain
+credentials. The filtered commands above avoid printing tokens.
 
 ## Query expansion concepts
 

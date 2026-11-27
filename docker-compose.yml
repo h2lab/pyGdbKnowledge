@@ -43,7 +43,7 @@ services:
     networks: [internal, frontend]
 
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    image: qdrant/qdrant:v1.20.2
     restart: unless-stopped
     volumes:
       - qdrant:/qdrant/storage

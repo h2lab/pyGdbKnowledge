@@ -67,6 +67,9 @@ def test_search_returns_documented_fields(client: TestClient) -> None:
     assert response.status_code == 200
     (result,) = response.json()["results"]
     assert result["document_id"] == "ds-1"
+    assert result["document_sha256"] == client.get("/api/v1/documents/ds-1").json()["content_hash"]
+    assert result["document_sha256"] == "a" * 64
+    assert result["document_sha256"] != "b" * 64
     assert result["section"] == "P > S"
     assert result["page"] == 4
     assert result["source_type"] == "official"
@@ -76,6 +79,40 @@ def test_search_returns_documented_fields(client: TestClient) -> None:
     assert 0.0 < result["score"] <= 1.0
     assert len(result["text"]) == 100 and result["truncated"] is True
     assert "embedding" not in result and "vector" not in result
+
+
+def test_search_hash_belongs_to_each_result_document(tmp_path: Path) -> None:
+    """Multiple hits retain their own source hash, not the passage hash."""
+    settings = Settings(workspace=tmp_path / "ws")
+    app = create_app(settings, Workspace(settings.workspace))
+    for document_id, digest in (("one", "a" * 64), ("two", "c" * 64)):
+        app.state.catalog.add_document(
+            Document(
+                document_id=document_id,
+                title=document_id,
+                content_hash=digest,
+                source_type=SourceType.OFFICIAL,
+            )
+        )
+        app.state.catalog.replace_content(
+            document_id,
+            [],
+            [
+                Chunk(
+                    chunk_id=f"{document_id}:0",
+                    document_id=document_id,
+                    ordinal=0,
+                    text="common search term",
+                    content_hash="b" * 64,
+                )
+            ],
+        )
+    client = TestClient(app)
+    results = client.post("/api/v1/search", json={"query": "common", "limit": 2}).json()["results"]
+    assert {result["document_id"]: result["document_sha256"] for result in results} == {
+        "one": "a" * 64,
+        "two": "c" * 64,
+    }
 
 
 def test_limit_is_capped_by_settings(client: TestClient) -> None:

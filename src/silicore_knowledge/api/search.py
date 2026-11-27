@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..config import Settings
 from ..retrieval.hybrid import HybridSearcher
 from ..security import audit_logger
-from ..storage.models import SearchFilters, SourceType
+from ..storage.models import SHA256_PATTERN, SearchFilters, SourceType
 from .deps import get_settings
 
 router = APIRouter()
@@ -34,6 +34,9 @@ class SearchResult(BaseModel):
 
     chunk_id: str
     document_id: str
+    document_sha256: str = Field(
+        pattern=SHA256_PATTERN, description="SHA-256 of the original source document."
+    )
     title: str
     section: str
     page: int | None
@@ -95,6 +98,7 @@ def search(
             SearchResult(
                 chunk_id=chunk.chunk_id,
                 document_id=document.document_id,
+                document_sha256=document.content_hash,
                 title=document.title,
                 section=chunk.section_path,
                 page=chunk.page,

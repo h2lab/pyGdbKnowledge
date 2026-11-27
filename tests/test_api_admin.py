@@ -3,6 +3,7 @@
 
 """Tests for the admin ingestion API."""
 
+import hashlib
 import time
 from pathlib import Path
 
@@ -60,6 +61,7 @@ def test_upload_indexes_and_makes_document_searchable(client: TestClient, tmp_pa
     assert done["status"] == "done" and done["chunks"]
     found = client.post("/api/v1/search", json={"query": "USART_ISR"}, headers=READ)
     assert [h["document_id"] for h in found.json()["results"]] == [body["document_id"]]
+    assert found.json()["results"][0]["document_sha256"] == hashlib.sha256(content).hexdigest()
 
     again = client.post("/api/v1/admin/ingest", params=QUERY, content=content, headers=ADMIN)
     assert again.json()["created"] is False

@@ -133,6 +133,15 @@ it can be combined with `--min-recall`, which checks the overall score. An empty
 fails the category gate. Interpret category scores in light of their question counts and ensure
 the benchmark corpus contains the documents required by the questions.
 
+To compare lexical and hybrid retrieval, first reindex the corpus with embeddings enabled.
+Then run the same questions with two configurations pointing to the same workspace and concept
+registry: one with embeddings enabled and one with them disabled. Use `--verbose` to compare
+individual ranks as well as overall and category metrics. Confirm that vectors cover the indexed
+chunks and check for semantic-search fallback warnings: a fallback measures lexical search, not
+hybrid retrieval. Model, corpus and filter choices can improve some queries while degrading others.
+An expected hit matches the listed criteria, not every relevant passage; inspect the results
+before interpreting a changed rank as a change in answer quality.
+
 ## Security notes
 
 Treat retrieved text as untrusted data. Keep Qdrant off any public network, terminate TLS in

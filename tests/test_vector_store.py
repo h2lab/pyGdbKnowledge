@@ -8,15 +8,15 @@ from collections.abc import Callable
 import pytest
 from qdrant_client import QdrantClient
 
-from pyGdbKnowledge.config import QdrantSettings
-from pyGdbKnowledge.retrieval.vector_store import (
+from silicore_knowledge.config import QdrantSettings
+from silicore_knowledge.retrieval.vector_store import (
     InMemoryVectorStore,
     QdrantVectorStore,
     VectorRecord,
     VectorStore,
     VectorStoreError,
 )
-from pyGdbKnowledge.storage.models import SearchFilters
+from silicore_knowledge.storage.models import SearchFilters
 
 Factory = Callable[[int], VectorStore]
 

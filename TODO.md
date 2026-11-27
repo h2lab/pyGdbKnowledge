@@ -48,7 +48,7 @@ Workspace layout:
 - [ ] **3. Workspace**: creation/validation of the workspace and its subdirectories,
   restrictive permissions, safe path resolution (anti path traversal), refuse to run as root.
 - [ ] **4. FastAPI app, `/health`, `serve` CLI**: application factory, `main.py`,
-  `pyGdbKnowledge serve` (uvicorn), logs on stdout, `TestClient` tests.
+  `silicore-knowledge serve` (uvicorn), logs on stdout, `TestClient` tests.
 
 ## Phase 1: base server
 
@@ -73,7 +73,7 @@ Workspace layout:
 
 - [ ] **12. Basic ingestion**: validation (PDF type, size), SHA-256, deduplication and
   versions, copy into `workspace/documents/`, explicitly provided metadata.
-  CLI `pyGdbKnowledge ingest file.pdf --manufacturer ... --device ... --document-type ...
+  CLI `silicore-knowledge ingest file.pdf --manufacturer ... --device ... --document-type ...
   --revision ... --source-url ...` (`--source-url` is provenance only, no download).
 - [ ] **13. PDF extraction**: pypdf page by page, titles and sections, tests on a generated
   PDF.
@@ -89,7 +89,7 @@ Workspace layout:
   source, date, version, SHA-256, channel, validation status, chunk/vector ids), fast removal
   of a document/batch/source with all derived data, retrievability test after removal.
 - [ ] **19. Corpus manifest and SVD support**: `config/corpus.yaml` (allowed domains, sources,
-  optional SHA-256, metadata) and `pyGdbKnowledge sync` (`--dry-run`, `--source`, `--limit`,
+  optional SHA-256, metadata) and `silicore-knowledge sync` (`--dry-run`, `--source`, `--limit`,
   `--index`): downloads what is missing, verifies the hash (manifest, else lock file written on
   first download), imports. HTTPS only, allow-listed hosts including redirects, never triggered
   by the API. Two initial corpora: `cmsis-svd/cmsis-svd-data` (SVD files, vendor, pinned commit)
@@ -101,7 +101,7 @@ Workspace layout:
 - [ ] **20. Pilot corpus and evaluation**: 10-30 documents, questions (register, bit field,
   timing, errata, DMA), page/section verification, Recall@k, chunking/scoring tuning.
   Started: pilot corpus (21 STM32 F4/U5 SVD files with `device_family`, 8 ST PDFs, ES0182 errata), `config/eval/questions.yaml`,
-  `pyGdbKnowledge evaluate` (Recall@k, MRR). Lexical tuning done (stop words, identifier ranking); the hybrid run is only partial
+  `silicore-knowledge evaluate` (Recall@k, MRR). Lexical tuning done (stop words, identifier ranking); the hybrid run is only partial
   (CPU too slow). Remaining: full embeddings run on a GPU machine.
 - [ ] **21. Docker and Compose**: `Dockerfile` (non-root user, read-only filesystem outside
   workspace/tmp), `docker-compose.yml` with Qdrant, workspace volume, `.env.example`,

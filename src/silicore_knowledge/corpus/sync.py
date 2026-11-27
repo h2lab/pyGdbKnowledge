@@ -32,7 +32,7 @@ from .manifest import (
     UrlSource,
 )
 
-logger = logging.getLogger("pyGdbKnowledge")
+logger = logging.getLogger("silicore_knowledge")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _LOCK_VERSION = 1
 

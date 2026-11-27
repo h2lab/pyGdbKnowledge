@@ -12,21 +12,21 @@ services:
       network: ${KNOWLEDGE_BUILD_NETWORK:-default}
       args:
         EXTRAS: ${KNOWLEDGE_EXTRAS:-pdf,vector}
-    image: pygdbknowledge:latest
+    image: silicore-knowledge:latest
     restart: unless-stopped
     depends_on:
       qdrant:
         condition: service_healthy
     environment:
-      PYGDBKNOWLEDGE__AUTH__READ_TOKEN: ${KNOWLEDGE_READ_TOKEN:?set KNOWLEDGE_READ_TOKEN in .env}
-      PYGDBKNOWLEDGE__AUTH__ADMIN_TOKEN: ${KNOWLEDGE_ADMIN_TOKEN:?set KNOWLEDGE_ADMIN_TOKEN in .env}
-      PYGDBKNOWLEDGE__QDRANT__URL: http://qdrant:6333
-      PYGDBKNOWLEDGE__EMBEDDINGS__ENABLED: ${KNOWLEDGE_EMBEDDINGS:-false}
-      PYGDBKNOWLEDGE__EMBEDDINGS__MODEL: ${KNOWLEDGE_EMBEDDING_MODEL:-BAAI/bge-m3}
+      SILICORE_KNOWLEDGE__AUTH__READ_TOKEN: ${KNOWLEDGE_READ_TOKEN:?set KNOWLEDGE_READ_TOKEN in .env}
+      SILICORE_KNOWLEDGE__AUTH__ADMIN_TOKEN: ${KNOWLEDGE_ADMIN_TOKEN:?set KNOWLEDGE_ADMIN_TOKEN in .env}
+      SILICORE_KNOWLEDGE__QDRANT__URL: http://qdrant:6333
+      SILICORE_KNOWLEDGE__EMBEDDINGS__ENABLED: ${KNOWLEDGE_EMBEDDINGS:-false}
+      SILICORE_KNOWLEDGE__EMBEDDINGS__MODEL: ${KNOWLEDGE_EMBEDDING_MODEL:-BAAI/bge-m3}
     ports:
       - "127.0.0.1:${KNOWLEDGE_PORT:-8080}:8080"
     volumes:
-      - workspace:/var/lib/pygdbknowledge
+      - workspace:/var/lib/silicore-knowledge
       # Corpus manifest and evaluation questions, for `sync` and `evaluate`.
       - ./config:/corpus:ro
       # Embedding model prepared beforehand (the container makes no download).

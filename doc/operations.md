@@ -23,7 +23,7 @@ Container: `cp .env.example .env`, set `KNOWLEDGE_READ_TOKEN` and `KNOWLEDGE_ADM
 ## Configuration
 
 [config/settings.yaml](../config/settings.yaml) documents every key. Pass it with `--config`
-or `PYGDBKNOWLEDGE_CONFIG`; any key can be overridden by `PYGDBKNOWLEDGE__<SECTION>__<KEY>`.
+or `SILICORE_KNOWLEDGE_CONFIG`; any key can be overridden by `SILICORE_KNOWLEDGE__<SECTION>__<KEY>`.
 
 - Tokens belong in the environment, never in the file; see the "Tokens" section of the
   [README](../README.md) for creation, use and rotation. Listening on a non-loopback address
@@ -36,7 +36,7 @@ or `PYGDBKNOWLEDGE_CONFIG`; any key can be overridden by `PYGDBKNOWLEDGE__<SECTI
 ## Running
 
 ```sh
-pyGdbKnowledge serve --config settings.yaml
+silicore-knowledge serve --config settings.yaml
 curl http://127.0.0.1:8080/api/v1/health
 curl -H "Authorization: Bearer $READ_TOKEN" -X POST http://127.0.0.1:8080/api/v1/search \
      -H 'Content-Type: application/json' -d '{"query": "FLASH_ACR LATENCY wait states"}'
@@ -51,34 +51,34 @@ and with the admin token `POST /admin/ingest`, `POST /admin/ingest/path`,
 
 The service never fetches anything by itself. Documents enter through one of:
 
-1. `pyGdbKnowledge ingest FILE... --source-type official|vendor|community [--index]`
+1. `silicore-knowledge ingest FILE... --source-type official|vendor|community [--index]`
    for local PDF or SVD files (metadata options: `--device-family`, `--device`,
    `--document-type`, ...).
-2. `pyGdbKnowledge sync [--dry-run] [--index]`: downloads the documents listed in
+2. `silicore-knowledge sync [--dry-run] [--index]`: downloads the documents listed in
    [config/corpus.yaml](../config/corpus.yaml) (allow-listed HTTPS hosts, size cap, throttling)
    and records SHA-256 digests in `config/corpus.lock.json` (trust on first use; a changed file
    is refused unless the manifest pins another hash). Re-running skips what is present.
 3. The admin API (`/admin/ingest`).
 
 Documents flagged by content screening go to quarantine: review, then
-`pyGdbKnowledge release DOCUMENT_ID`. Every lifecycle event is kept in the audit trail
-(`pyGdbKnowledge audit [DOCUMENT_ID]`).
+`silicore-knowledge release DOCUMENT_ID`. Every lifecycle event is kept in the audit trail
+(`silicore-knowledge audit [DOCUMENT_ID]`).
 
 To add a corpus entry, append the URL (taken from the document page on www.st.com) to the
 manifest with its title, `device_family`, `device` and `document_type`, then run `sync`.
 
 ## Index maintenance
 
-- `pyGdbKnowledge index [ID...]` indexes documents that have no index yet.
-- `pyGdbKnowledge reindex [ID...]` rebuilds chunks, FTS5 rows and vectors from the stored files.
-- `pyGdbKnowledge delete ID... [--source-url-prefix P]` removes files, index and vectors.
+- `silicore-knowledge index [ID...]` indexes documents that have no index yet.
+- `silicore-knowledge reindex [ID...]` rebuilds chunks, FTS5 rows and vectors from the stored files.
+- `silicore-knowledge delete ID... [--source-url-prefix P]` removes files, index and vectors.
 
 SQLite and Qdrant are derived data: both can be rebuilt from `documents/` alone.
 
 ## Embedding model versions
 
 Vectors are not tagged with the model that produced them. After changing
-`embeddings.model` (or its `max_seq_length`), run `pyGdbKnowledge reindex` with embeddings
+`embeddings.model` (or its `max_seq_length`), run `silicore-knowledge reindex` with embeddings
 enabled, otherwise old and new vectors are mixed. If the vector dimension changes, delete the
 Qdrant collection first. The default model `BAAI/bge-m3` is large; on a CPU-only machine a
 small model (for example `BAAI/bge-small-en-v1.5`) is far faster, with a lower quality ceiling.
@@ -92,13 +92,13 @@ Back up, while the service is stopped or idle:
 - the configuration (without tokens, which live in your secret store);
 - `config/corpus.yaml` and `config/corpus.lock.json`.
 
-Restore: put them back, then run `pyGdbKnowledge reindex` to rebuild vectors (Qdrant storage
+Restore: put them back, then run `silicore-knowledge reindex` to rebuild vectors (Qdrant storage
 can also be backed up but is not required). With compose, the data lives in the `workspace`
 and `qdrant` volumes.
 
 ## Quality evaluation
 
-`pyGdbKnowledge evaluate config/eval/questions.yaml [--verbose] [--min-recall 0.9]` reports
+`silicore-knowledge evaluate config/eval/questions.yaml [--verbose] [--min-recall 0.9]` reports
 Recall@k and MRR per question category on the indexed corpus. Run it after any change to
 chunking, ranking or the embedding model, and add questions when the corpus grows.
 

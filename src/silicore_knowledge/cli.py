@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-"""Command-line entry point for pyGdbKnowledge."""
+"""Command-line entry point for silicore-knowledge."""
 
 import argparse
 import sys
@@ -26,12 +26,14 @@ from .storage.catalog import Catalog, CatalogError
 from .storage.models import SourceType
 from .workspace import Workspace, WorkspaceError
 
-_CONFIG_HELP = "YAML configuration file (default: $PYGDBKNOWLEDGE_CONFIG, else built-in defaults)"
+_CONFIG_HELP = (
+    "YAML configuration file (default: $SILICORE_KNOWLEDGE_CONFIG, else built-in defaults)"
+)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="pyGdbKnowledge",
+        prog="silicore-knowledge",
         description="Knowledge server (hybrid RAG) for pyGdbToolkit.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
@@ -105,7 +107,7 @@ def _open(config: Path | None) -> tuple[Settings, Workspace, Catalog] | None:
         workspace = Workspace(settings.workspace)
         return settings, workspace, Catalog(workspace.catalog_path)
     except (ConfigError, WorkspaceError, CatalogError) as exc:
-        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return None
 
 
@@ -113,7 +115,7 @@ def _indexer(settings: Settings, workspace: Workspace, catalog: Catalog) -> Inde
     try:
         components = build_vector_components(settings)
     except (EmbeddingError, VectorStoreError) as exc:
-        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return None
     embedder, store = components if components else (None, None)
     return Indexer(settings, workspace, catalog, embedder, store)
@@ -126,7 +128,7 @@ def _print_report(report: BatchReport) -> int:
             f"({result.sections} sections, {result.chunks} chunks, {result.vectors} vectors)"
         )
     for document_id, message in report.failed.items():
-        print(f"pyGdbKnowledge: {document_id}: {message}", file=sys.stderr)
+        print(f"silicore-knowledge: {document_id}: {message}", file=sys.stderr)
     return 1 if report.failed else 0
 
 
@@ -142,7 +144,7 @@ def _index(args: argparse.Namespace, *, rebuild: bool) -> int:
 
 def _delete(args: argparse.Namespace) -> int:
     if not args.documents and not args.source_url_prefix:
-        print("pyGdbKnowledge: give document ids or --source-url-prefix", file=sys.stderr)
+        print("silicore-knowledge: give document ids or --source-url-prefix", file=sys.stderr)
         return 2
     opened = _open(args.config)
     if opened is None:
@@ -158,7 +160,7 @@ def _delete(args: argparse.Namespace) -> int:
         if document_id not in report.failed:
             print(f"deleted: {document_id}")
     for document_id, message in report.failed.items():
-        print(f"pyGdbKnowledge: {document_id}: {message}", file=sys.stderr)
+        print(f"silicore-knowledge: {document_id}: {message}", file=sys.stderr)
     return 1 if report.failed else 0
 
 
@@ -172,7 +174,7 @@ def _release(args: argparse.Namespace) -> int:
     try:
         result = indexer.release(args.document)
     except IndexingError as exc:
-        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return 1
     print(f"released: {result.document_id} ({result.chunks} chunks)")
     return 0
@@ -193,7 +195,7 @@ def _audit(args: argparse.Namespace) -> int:
 
 def _ingest(args: argparse.Namespace) -> int:
     if args.title and len(args.files) > 1:
-        print("pyGdbKnowledge: --title requires a single file", file=sys.stderr)
+        print("silicore-knowledge: --title requires a single file", file=sys.stderr)
         return 2
     opened = _open(args.config)
     if opened is None:
@@ -217,7 +219,7 @@ def _ingest(args: argparse.Namespace) -> int:
                 workspace, catalog, path, metadata, settings.limits.max_upload_bytes
             )
         except (IngestError, CatalogError) as exc:
-            print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+            print(f"silicore-knowledge: {exc}", file=sys.stderr)
             failures += 1
             continue
         state = "imported" if result.created else "already present"
@@ -255,12 +257,12 @@ def _sync(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
             limit=args.limit,
         )
     except CorpusError as exc:
-        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return 1
     for url in report.planned:
         print(f"would download: {url}")
     for url, message in report.failed.items():
-        print(f"pyGdbKnowledge: {url}: {message}", file=sys.stderr)
+        print(f"silicore-knowledge: {url}: {message}", file=sys.stderr)
     print(
         f"sync: {len(report.imported)} imported, {len(report.skipped)} already present, "
         f"{len(report.planned)} planned, {len(report.failed)} failed"
@@ -283,7 +285,7 @@ def _evaluate(args: argparse.Namespace) -> int:
         questions = load_questions(args.questions)
         components = build_vector_components(settings)
     except (EvaluationError, EmbeddingError, VectorStoreError) as exc:
-        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return 1
     embedder, store = components if components else (None, None)
     report = evaluate(HybridSearcher(catalog, embedder, store), questions)
@@ -307,7 +309,7 @@ def _serve(config: Path | None) -> int:
         workspace = Workspace(settings.workspace)
         app = create_app(settings, workspace)
     except (ConfigError, WorkspaceError, CatalogError, EmbeddingError, VectorStoreError) as exc:
-        print(f"pyGdbKnowledge: {exc}", file=sys.stderr)
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return 1
     configure_logging(settings.log_level)
     uvicorn.run(

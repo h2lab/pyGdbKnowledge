@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from pyGdbKnowledge import cli
+from silicore_knowledge import cli
+
+
+def test_program_name() -> None:
+    """The CLI uses the renamed executable name."""
+    assert cli._parser().prog == "silicore-knowledge"
 
 
 def test_command_is_required() -> None:

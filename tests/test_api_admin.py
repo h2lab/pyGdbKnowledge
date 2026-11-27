@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from pdfmaker import make_pdf
 from pydantic import SecretStr
 
-from pyGdbKnowledge.config import AuthSettings, IngestionSettings, LimitSettings, Settings
-from pyGdbKnowledge.main import create_app
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge.config import AuthSettings, IngestionSettings, LimitSettings, Settings
+from silicore_knowledge.main import create_app
+from silicore_knowledge.workspace import Workspace
 
 ADMIN = {"Authorization": "Bearer admin-secret-value"}
 READ = {"Authorization": "Bearer read-secret-value"}

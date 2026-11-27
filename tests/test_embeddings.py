@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from pyGdbKnowledge.config import EmbeddingSettings
-from pyGdbKnowledge.retrieval.embeddings import (
+from silicore_knowledge.config import EmbeddingSettings
+from silicore_knowledge.retrieval.embeddings import (
     EmbeddingError,
     HashingEmbedder,
     SentenceTransformerEmbedder,

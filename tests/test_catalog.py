@@ -10,13 +10,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from pyGdbKnowledge.storage.catalog import (
+from silicore_knowledge.storage.catalog import (
     SCHEMA_VERSION,
     Catalog,
     CatalogError,
     DuplicateDocumentError,
 )
-from pyGdbKnowledge.storage.models import Chunk, Document, Section, SourceType
+from silicore_knowledge.storage.models import Chunk, Document, Section, SourceType
 
 HASH_A = "a" * 64
 HASH_B = "b" * 64

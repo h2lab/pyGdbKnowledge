@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from pyGdbKnowledge.retrieval.embeddings import EmbeddingError
-from pyGdbKnowledge.retrieval.hybrid import HybridSearcher
-from pyGdbKnowledge.retrieval.vector_store import InMemoryVectorStore, VectorRecord
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import (
+from silicore_knowledge.retrieval.embeddings import EmbeddingError
+from silicore_knowledge.retrieval.hybrid import HybridSearcher
+from silicore_knowledge.retrieval.vector_store import InMemoryVectorStore, VectorRecord
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import (
     Chunk,
     Document,
     DocumentStatus,

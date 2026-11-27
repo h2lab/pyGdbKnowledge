@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from ..storage.catalog import Catalog
 from .pipeline import Indexer
 
-logger = logging.getLogger("pyGdbKnowledge")
+logger = logging.getLogger("silicore_knowledge")
 
 
 @unique

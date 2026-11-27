@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 version = 1
-SPDX-PackageName = "pyGdbKnowledge"
+SPDX-PackageName = "silicore-knowledge"
 SPDX-PackageSupplier = "H2Lab"
-SPDX-PackageDownloadLocation = "https://github.com/h2lab/pyGdbKnowledge"
+SPDX-PackageDownloadLocation = "https://github.com/h2lab/silicore-knowledge"
 
 [[annotations]]
 path = ".github/**"

@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from pyGdbKnowledge.config import LimitSettings, Settings
-from pyGdbKnowledge.main import create_app
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import Chunk, Document, DocumentStatus, Section, SourceType
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge.config import LimitSettings, Settings
+from silicore_knowledge.main import create_app
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import Chunk, Document, DocumentStatus, Section, SourceType
+from silicore_knowledge.workspace import Workspace
 
 HASH_A = "a" * 64
 HASH_B = "b" * 64

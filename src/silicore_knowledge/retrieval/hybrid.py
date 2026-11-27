@@ -12,7 +12,7 @@ from .embeddings import Embedder, EmbeddingError
 from .lexical_search import identifier_search, lexical_search
 from .vector_store import VectorStore, VectorStoreError
 
-logger = logging.getLogger("pyGdbKnowledge")
+logger = logging.getLogger("silicore_knowledge")
 
 RRF_K = 60
 CANDIDATE_FACTOR = 5

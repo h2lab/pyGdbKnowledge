@@ -11,16 +11,16 @@ from typing import Any
 import pytest
 from pdfmaker import make_pdf
 
-from pyGdbKnowledge.config import OcrSettings, Settings
-from pyGdbKnowledge.ingestion import ocr as ocr_module
-from pyGdbKnowledge.ingestion import pipeline
-from pyGdbKnowledge.ingestion.extract import ExtractedDocument, ExtractedPage
-from pyGdbKnowledge.ingestion.importer import DocumentMetadata, import_pdf
-from pyGdbKnowledge.ingestion.ocr import OcrError, needs_ocr, ocr_pdf
-from pyGdbKnowledge.ingestion.pipeline import Indexer, IndexingError
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import SourceType
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge.config import OcrSettings, Settings
+from silicore_knowledge.ingestion import ocr as ocr_module
+from silicore_knowledge.ingestion import pipeline
+from silicore_knowledge.ingestion.extract import ExtractedDocument, ExtractedPage
+from silicore_knowledge.ingestion.importer import DocumentMetadata, import_pdf
+from silicore_knowledge.ingestion.ocr import OcrError, needs_ocr, ocr_pdf
+from silicore_knowledge.ingestion.pipeline import Indexer, IndexingError
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import SourceType
+from silicore_knowledge.workspace import Workspace
 
 META = DocumentMetadata(source_type=SourceType.OFFICIAL)
 

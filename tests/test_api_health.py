@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from pyGdbKnowledge import __version__
-from pyGdbKnowledge.config import Settings
-from pyGdbKnowledge.main import REQUEST_ID_HEADER, create_app
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge import __version__
+from silicore_knowledge.config import Settings
+from silicore_knowledge.main import REQUEST_ID_HEADER, create_app
+from silicore_knowledge.workspace import Workspace
 
 
 @pytest.fixture

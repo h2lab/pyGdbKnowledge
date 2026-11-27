@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from pyGdbKnowledge.config import LimitSettings, Settings
-from pyGdbKnowledge.main import create_app
-from pyGdbKnowledge.storage.models import Chunk, Document, Section, SourceType
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge.config import LimitSettings, Settings
+from silicore_knowledge.main import create_app
+from silicore_knowledge.storage.models import Chunk, Document, Section, SourceType
+from silicore_knowledge.workspace import Workspace
 
 LONG_TEXT = "usart_isr " + "x" * 300
 

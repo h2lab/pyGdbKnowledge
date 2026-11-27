@@ -35,6 +35,27 @@ class DocumentEntry(_Model):
     device: str | None = None
     document_type: str | None = None
     revision: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+
+    def __getitem__(self, key):
+        # Permettre l'accès par clé pour compatibilité avec les tests existants
+        if key == "document_type":
+            return self.document_type
+        elif key == "keywords":
+            return self.keywords
+        elif key == "url":
+            return self.url
+        elif key == "title":
+            return self.title
+        elif key == "manufacturer":
+            return self.manufacturer
+        elif key == "device_family":
+            return self.device_family
+        elif key == "device":
+            return self.device
+        elif key == "revision":
+            return self.revision
+        raise KeyError(key)
 
 
 class UrlSource(_Model):
@@ -45,6 +66,11 @@ class UrlSource(_Model):
     source_type: SourceType
     manufacturer: str | None = None
     documents: tuple[DocumentEntry, ...] = ()
+
+    def __getitem__(self, key):
+        if key == "documents":
+            return self.documents
+        raise KeyError(key)
 
 
 class GithubSvdSource(_Model):

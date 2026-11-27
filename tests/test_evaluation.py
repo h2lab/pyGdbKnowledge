@@ -9,15 +9,15 @@ import pytest
 import yaml
 from test_svd import SVD
 
-from pyGdbKnowledge import cli
-from pyGdbKnowledge.config import Settings
-from pyGdbKnowledge.evaluation import EvaluationError, evaluate, load_questions
-from pyGdbKnowledge.ingestion.importer import DocumentMetadata, import_document
-from pyGdbKnowledge.ingestion.pipeline import Indexer
-from pyGdbKnowledge.retrieval.hybrid import HybridSearcher
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import SourceType
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge import cli
+from silicore_knowledge.config import Settings
+from silicore_knowledge.evaluation import EvaluationError, evaluate, load_questions
+from silicore_knowledge.ingestion.importer import DocumentMetadata, import_document
+from silicore_knowledge.ingestion.pipeline import Indexer
+from silicore_knowledge.retrieval.hybrid import HybridSearcher
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import SourceType
+from silicore_knowledge.workspace import Workspace
 
 QUESTIONS = [
     {

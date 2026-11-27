@@ -8,14 +8,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from pyGdbKnowledge.retrieval.lexical_search import (
+from silicore_knowledge.retrieval.lexical_search import (
     MAX_TERMS,
     build_identifier_query,
     build_match_query,
     lexical_search,
 )
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import (
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import (
     Chunk,
     Document,
     DocumentStatus,

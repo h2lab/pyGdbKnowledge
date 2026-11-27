@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 from pdfmaker import make_pdf
 
-from pyGdbKnowledge import cli
-from pyGdbKnowledge.config import Settings
-from pyGdbKnowledge.ingestion.importer import DocumentMetadata, import_pdf
-from pyGdbKnowledge.ingestion.pipeline import Indexer, IndexingError
-from pyGdbKnowledge.retrieval.embeddings import EmbeddingError, HashingEmbedder
-from pyGdbKnowledge.retrieval.vector_store import InMemoryVectorStore, VectorStoreError
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import SearchFilters, SourceType
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge import cli
+from silicore_knowledge.config import Settings
+from silicore_knowledge.ingestion.importer import DocumentMetadata, import_pdf
+from silicore_knowledge.ingestion.pipeline import Indexer, IndexingError
+from silicore_knowledge.retrieval.embeddings import EmbeddingError, HashingEmbedder
+from silicore_knowledge.retrieval.vector_store import InMemoryVectorStore, VectorStoreError
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import SearchFilters, SourceType
+from silicore_knowledge.workspace import Workspace
 
 META = DocumentMetadata(source_type=SourceType.OFFICIAL, manufacturer="ST", device="STM32U5")
 

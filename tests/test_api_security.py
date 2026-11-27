@@ -13,11 +13,11 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr, ValidationError
 
-from pyGdbKnowledge.api.auth import Role, require_admin
-from pyGdbKnowledge.config import AuthSettings, LimitSettings, ServerSettings, Settings
-from pyGdbKnowledge.main import create_app
-from pyGdbKnowledge.security import RateLimiter
-from pyGdbKnowledge.workspace import Workspace
+from silicore_knowledge.api.auth import Role, require_admin
+from silicore_knowledge.config import AuthSettings, LimitSettings, ServerSettings, Settings
+from silicore_knowledge.main import create_app
+from silicore_knowledge.security import RateLimiter
+from silicore_knowledge.workspace import Workspace
 
 READ = "read-secret-value"
 ADMIN = "admin-secret-value"
@@ -146,7 +146,7 @@ def test_audit_log_records_decisions_and_returned_ids(
     client: TestClient, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Auth decisions and search results are audited without secrets or the raw query."""
-    with caplog.at_level(logging.INFO, logger="pyGdbKnowledge.audit"):
+    with caplog.at_level(logging.INFO, logger="silicore_knowledge.audit"):
         client.get("/api/v1/stats", headers=_auth("wrong-token-value"))
         client.post("/api/v1/search", json={"query": "private words"}, headers=_auth(READ))
     text = caplog.text

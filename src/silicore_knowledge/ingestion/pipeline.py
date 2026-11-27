@@ -23,7 +23,7 @@ from .ocr import OcrError, needs_ocr, ocr_pdf
 from .screening import screen_chunks
 from .svd import SvdError, chunk_svd
 
-logger = logging.getLogger("pyGdbKnowledge")
+logger = logging.getLogger("silicore_knowledge")
 
 
 class IndexingError(Exception):

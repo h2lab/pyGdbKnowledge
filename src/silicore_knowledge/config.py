@@ -11,8 +11,8 @@ from typing import Any, Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
-CONFIG_PATH_ENV = "PYGDBKNOWLEDGE_CONFIG"
-ENV_PREFIX = "PYGDBKNOWLEDGE__"
+CONFIG_PATH_ENV = "SILICORE_KNOWLEDGE_CONFIG"
+ENV_PREFIX = "SILICORE_KNOWLEDGE__"
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
@@ -120,7 +120,7 @@ class OcrSettings(_Section):
 class Settings(_Section):
     """Complete service settings."""
 
-    workspace: Path = Path("/var/lib/pygdbknowledge")
+    workspace: Path = Path("/var/lib/silicore-knowledge")
     log_level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     server: ServerSettings = ServerSettings()
     qdrant: QdrantSettings = QdrantSettings()
@@ -150,9 +150,9 @@ def _merge(base: dict[str, Any], key_path: list[str], value: str) -> None:
 def load_settings(path: Path | None = None, environ: Mapping[str, str] | None = None) -> Settings:
     """Load settings from an optional YAML file and environment overrides.
 
-    Environment variables named ``PYGDBKNOWLEDGE__<SECTION>__<KEY>`` override file values
-    (for example ``PYGDBKNOWLEDGE__SERVER__PORT=9000``). If ``path`` is None, the
-    ``PYGDBKNOWLEDGE_CONFIG`` variable is used when set; otherwise defaults apply.
+    Environment variables named ``SILICORE_KNOWLEDGE__<SECTION>__<KEY>`` override file values
+    (for example ``SILICORE_KNOWLEDGE__SERVER__PORT=9000``). If ``path`` is None, the
+    ``SILICORE_KNOWLEDGE_CONFIG`` variable is used when set; otherwise defaults apply.
 
     Parameters
     ----------

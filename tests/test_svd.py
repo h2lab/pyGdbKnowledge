@@ -7,19 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from pyGdbKnowledge.config import IngestionSettings, Settings
-from pyGdbKnowledge.ingestion.importer import (
+from silicore_knowledge.config import IngestionSettings, Settings
+from silicore_knowledge.ingestion.importer import (
     DocumentMetadata,
     IngestError,
     import_document,
     import_pdf,
 )
-from pyGdbKnowledge.ingestion.pipeline import Indexer
-from pyGdbKnowledge.ingestion.svd import SvdError, chunk_svd
-from pyGdbKnowledge.retrieval.hybrid import HybridSearcher
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import SearchFilters, SourceType
-from pyGdbKnowledge.workspace import Area, Workspace
+from silicore_knowledge.ingestion.pipeline import Indexer
+from silicore_knowledge.ingestion.svd import SvdError, chunk_svd
+from silicore_knowledge.retrieval.hybrid import HybridSearcher
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import SearchFilters, SourceType
+from silicore_knowledge.workspace import Area, Workspace
 
 SVD = """<?xml version="1.0" encoding="utf-8"?>
 <device schemaVersion="1.3">

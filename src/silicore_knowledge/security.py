@@ -8,7 +8,7 @@ import threading
 import time
 from collections import deque
 
-audit_logger = logging.getLogger("pyGdbKnowledge.audit")
+audit_logger = logging.getLogger("silicore_knowledge.audit")
 
 
 class RateLimiter:

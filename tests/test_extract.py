@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from pdfmaker import make_pdf
 
-from pyGdbKnowledge.config import IngestionSettings
-from pyGdbKnowledge.ingestion.extract import (
+from silicore_knowledge.config import IngestionSettings
+from silicore_knowledge.ingestion.extract import (
     ExtractionError,
     build_sections,
     clean_text,

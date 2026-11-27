@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-# Pilot evaluation questions for `pyGdbKnowledge evaluate`.
+# Pilot evaluation questions for `silicore-knowledge evaluate`.
 # Each question lists the evidence a correct answer needs; `document` is matched against the
 # document id, title and device, `contains` against the chunk text (case-insensitive).
 # Categories: register, bitfield, address, dma, timing, hardware, cross.

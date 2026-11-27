@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from pyGdbKnowledge.workspace import Area, Workspace, WorkspaceError
+from silicore_knowledge.workspace import Area, Workspace, WorkspaceError
 
 SHA = "a" * 64
 

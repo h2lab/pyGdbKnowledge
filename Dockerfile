@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-# Build: docker build -t pygdbknowledge .
+# Build: docker build -t silicore-knowledge .
 # Build without the semantic stack (lexical search only): --build-arg EXTRAS=pdf
 ARG PYTHON_VERSION=3.13
 
@@ -22,21 +22,21 @@ RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu ".[${EXTR
 
 FROM python:${PYTHON_VERSION}-slim
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin knowledge \
-    && mkdir -p /var/lib/pygdbknowledge /models \
-    && chown knowledge /var/lib/pygdbknowledge
+    && mkdir -p /var/lib/silicore-knowledge /models \
+    && chown knowledge /var/lib/silicore-knowledge
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=10001:0 --chmod=0400 config/settings.yaml /etc/pygdbknowledge/settings.yaml
+COPY --chown=10001:0 --chmod=0400 config/settings.yaml /etc/silicore-knowledge/settings.yaml
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/models \
     HF_HUB_OFFLINE=1 \
-    PYGDBKNOWLEDGE_CONFIG=/etc/pygdbknowledge/settings.yaml \
-    PYGDBKNOWLEDGE__SERVER__HOST=0.0.0.0
+    SILICORE_KNOWLEDGE_CONFIG=/etc/silicore-knowledge/settings.yaml \
+    SILICORE_KNOWLEDGE__SERVER__HOST=0.0.0.0
 USER knowledge
-VOLUME ["/var/lib/pygdbknowledge"]
+VOLUME ["/var/lib/silicore-knowledge"]
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/api/v1/health', timeout=3)"]
-ENTRYPOINT ["pyGdbKnowledge"]
+ENTRYPOINT ["silicore-knowledge"]
 CMD ["serve"]

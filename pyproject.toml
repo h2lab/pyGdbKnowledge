@@ -7,7 +7,7 @@ requires = ["setuptools>=80", "setuptools_scm>=9"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pyGdbKnowledge"
+name = "silicore-knowledge"
 description = "Local knowledge server (hybrid RAG) for pyGdbToolkit"
 dynamic = ["version"]
 requires-python = ">= 3.12"
@@ -36,11 +36,11 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/h2lab"
-Repository = "https://github.com/h2lab/pyGdbKnowledge"
-Issues = "https://github.com/h2lab/pyGdbKnowledge/issues"
+Repository = "https://github.com/h2lab/silicore-knowledge"
+Issues = "https://github.com/h2lab/silicore-knowledge/issues"
 
 [project.scripts]
-pyGdbKnowledge = "pyGdbKnowledge.cli:main"
+"silicore-knowledge" = "silicore_knowledge.cli:main"
 
 [project.optional-dependencies]
 vector = [
@@ -80,7 +80,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 relative_files = true
-source = ["pyGdbKnowledge"]
+source = ["silicore_knowledge"]
 
 [tool.mypy]
 python_version = "3.12"

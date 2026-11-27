@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 from .manifest import CorpusError
 
-USER_AGENT = "pyGdbKnowledge-sync/0.1 (operator-driven corpus sync)"
+USER_AGENT = "silicore-knowledge-sync/0.1 (operator-driven corpus sync)"
 _CHUNK = 256 * 1024
 _MAX_JSON_BYTES = 32 * 1024 * 1024
 _MAX_REDIRECTS = 5

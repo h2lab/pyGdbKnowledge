@@ -24,7 +24,7 @@ from ..storage.models import ID_PATTERN, SourceType
 from ..workspace import Area, Workspace
 from .deps import get_catalog, get_settings
 
-logger = logging.getLogger("pyGdbKnowledge")
+logger = logging.getLogger("silicore_knowledge")
 
 router = APIRouter(prefix="/admin")
 

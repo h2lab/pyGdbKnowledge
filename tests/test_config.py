@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pyGdbKnowledge.config import ConfigError, Settings, load_settings
+from silicore_knowledge.config import ConfigError, Settings, load_settings
 
 REPO_CONFIG = Path(__file__).parent.parent / "config" / "settings.yaml"
 
@@ -32,8 +32,8 @@ def test_environment_overrides_file(tmp_path: Path) -> None:
     settings = load_settings(
         path,
         environ={
-            "PYGDBKNOWLEDGE__SERVER__PORT": "9100",
-            "PYGDBKNOWLEDGE__AUTH__READ_TOKEN": "a-read-token",
+            "SILICORE_KNOWLEDGE__SERVER__PORT": "9100",
+            "SILICORE_KNOWLEDGE__AUTH__READ_TOKEN": "a-read-token",
         },
     )
     assert settings.server.port == 9100
@@ -41,10 +41,10 @@ def test_environment_overrides_file(tmp_path: Path) -> None:
 
 
 def test_config_path_from_environment(tmp_path: Path) -> None:
-    """PYGDBKNOWLEDGE_CONFIG selects the file when no path is given."""
+    """SILICORE_KNOWLEDGE_CONFIG selects the file when no path is given."""
     path = tmp_path / "s.yaml"
     path.write_text("log_level: DEBUG\n", encoding="utf-8")
-    assert load_settings(environ={"PYGDBKNOWLEDGE_CONFIG": str(path)}).log_level == "DEBUG"
+    assert load_settings(environ={"SILICORE_KNOWLEDGE_CONFIG": str(path)}).log_level == "DEBUG"
 
 
 def test_unknown_key_rejected(tmp_path: Path) -> None:
@@ -58,7 +58,7 @@ def test_unknown_key_rejected(tmp_path: Path) -> None:
 def test_unknown_environment_override_rejected() -> None:
     """Unknown overrides under the prefix are rejected."""
     with pytest.raises(ConfigError):
-        load_settings(environ={"PYGDBKNOWLEDGE__SERVER__PROT": "1"})
+        load_settings(environ={"SILICORE_KNOWLEDGE__SERVER__PROT": "1"})
 
 
 def test_missing_file_and_bad_yaml(tmp_path: Path) -> None:
@@ -74,8 +74,8 @@ def test_missing_file_and_bad_yaml(tmp_path: Path) -> None:
 def test_identical_tokens_rejected_without_leaking() -> None:
     """Read and admin tokens must differ; the error never echoes secrets."""
     env = {
-        "PYGDBKNOWLEDGE__AUTH__READ_TOKEN": "s3cret-value",
-        "PYGDBKNOWLEDGE__AUTH__ADMIN_TOKEN": "s3cret-value",
+        "SILICORE_KNOWLEDGE__AUTH__READ_TOKEN": "s3cret-value",
+        "SILICORE_KNOWLEDGE__AUTH__ADMIN_TOKEN": "s3cret-value",
     }
     with pytest.raises(ConfigError, match="must be different") as info:
         load_settings(environ=env)
@@ -84,7 +84,7 @@ def test_identical_tokens_rejected_without_leaking() -> None:
 
 def test_secrets_are_masked() -> None:
     """Tokens do not appear in repr."""
-    settings = load_settings(environ={"PYGDBKNOWLEDGE__AUTH__READ_TOKEN": "abc123"})
+    settings = load_settings(environ={"SILICORE_KNOWLEDGE__AUTH__READ_TOKEN": "abc123"})
     assert "abc123" not in repr(settings)
 
 
@@ -93,7 +93,7 @@ def test_limits_consistency() -> None:
     with pytest.raises(ConfigError):
         load_settings(
             environ={
-                "PYGDBKNOWLEDGE__LIMITS__MAX_RESULTS": "5",
-                "PYGDBKNOWLEDGE__LIMITS__DEFAULT_RESULTS": "10",
+                "SILICORE_KNOWLEDGE__LIMITS__MAX_RESULTS": "5",
+                "SILICORE_KNOWLEDGE__LIMITS__DEFAULT_RESULTS": "10",
             }
         )

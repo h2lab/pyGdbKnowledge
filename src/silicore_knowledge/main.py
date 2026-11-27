@@ -32,7 +32,7 @@ API_PREFIX = "/api/v1"
 REQUEST_ID_HEADER = "X-Request-ID"
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
-logger = logging.getLogger("pyGdbKnowledge")
+logger = logging.getLogger("silicore_knowledge")
 
 
 def configure_logging(level: str) -> None:
@@ -76,7 +76,7 @@ def create_app(
         Application exposing the versioned API under ``/api/v1``.
     """
     app = FastAPI(
-        title="pyGdbKnowledge",
+        title="Silicore Knowledge",
         version=__version__,
         docs_url=None,
         redoc_url=None,

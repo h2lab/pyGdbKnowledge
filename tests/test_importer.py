@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from pyGdbKnowledge import cli
-from pyGdbKnowledge.ingestion.importer import DocumentMetadata, IngestError, import_pdf
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import SourceType
-from pyGdbKnowledge.workspace import Area, Workspace
+from silicore_knowledge import cli
+from silicore_knowledge.ingestion.importer import DocumentMetadata, IngestError, import_pdf
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import SourceType
+from silicore_knowledge.workspace import Area, Workspace
 
 PDF = b"%PDF-1.7\n% fake content for tests\n"
 META = DocumentMetadata(source_type=SourceType.OFFICIAL, manufacturer="ST")

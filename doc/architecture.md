@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Architecture
 
-pyGdbKnowledge is a standalone knowledge server (hybrid RAG) queried by pyGdbToolkit over
+silicore-knowledge is a standalone knowledge server (hybrid RAG) queried by pyGdbToolkit over
 HTTP. It owns its documents, ingestion pipeline, indexes and API. The agent in pyGdbToolkit
 only calls it through read-only tools. Ollama (or any LLM backend) stays a separate service
 used for inference by the agent, not by this server.
@@ -76,7 +76,7 @@ local file -> validation + SHA-256 + duplicate/version detection
   parsed defensively (DOCTYPE and entities refused, bounded size and depth) and chunked into one
   section per peripheral with registers, addresses, reset values and bit fields, using the same
   `Bits 7:4 NAME: ...` notation as datasheets. The PDF-only upload endpoint refuses SVD.
-- `pyGdbKnowledge sync` (operator CLI only) reads `config/corpus.yaml`: sources are either an
+- `silicore-knowledge sync` (operator CLI only) reads `config/corpus.yaml`: sources are either an
   explicit URL list (ST documents) or a GitHub repository of SVD files, pinned to a commit.
   Downloads are HTTPS-only, limited to the manifest's allowed domains on every redirect hop,
   size-capped, throttled and verified against the manifest SHA-256 or, failing that, the hash
@@ -153,4 +153,4 @@ starts the service and Qdrant:
 - Healthchecks: `GET /api/v1/health` for the service, a TCP probe for Qdrant.
 
 Administration commands run in the same container, for example
-`docker compose exec knowledge pyGdbKnowledge audit`.
+`docker compose exec knowledge silicore-knowledge audit`.

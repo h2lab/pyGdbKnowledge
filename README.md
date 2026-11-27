@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 H2Lab Development Team
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# pyGdbKnowledge
+# silicore-knowledge
 
 Standalone knowledge server (hybrid RAG) used by pyGdbToolkit over HTTP.
 Target architecture: see [doc/architecture.md](doc/architecture.md).
@@ -16,16 +16,16 @@ python -m venv .venv && . .venv/bin/activate
 pip install -e .[pdf]
 
 printf 'workspace: ./workspace\n' > settings.yaml
-export PYGDBKNOWLEDGE_CONFIG=$PWD/settings.yaml
+export SILICORE_KNOWLEDGE_CONFIG=$PWD/settings.yaml
 
-pyGdbKnowledge sync --index          # download and index the corpus of config/corpus.yaml
-pyGdbKnowledge serve &               # http://127.0.0.1:8080
+silicore-knowledge sync --index          # download and index the corpus of config/corpus.yaml
+silicore-knowledge serve &               # http://127.0.0.1:8080
 curl -s http://127.0.0.1:8080/api/v1/health
 curl -s -X POST http://127.0.0.1:8080/api/v1/search -H 'Content-Type: application/json' \
      -d '{"query": "FLASH_ACR LATENCY wait states", "filters": {"device": "STM32F407"}}'
 ```
 
-`sync --dry-run` lists what would be downloaded. `pyGdbKnowledge ingest FILE --source-type
+`sync --dry-run` lists what would be downloaded. `silicore-knowledge ingest FILE --source-type
 official --index` imports your own PDF or SVD files instead. On loopback no token is needed;
 see [doc/operations.md](doc/operations.md) for authentication and the other commands.
 
@@ -62,8 +62,8 @@ files. Repeat the file ACL for another manifest or if the file is replaced. ACL 
 the `setfacl` utility are required.
 
 ```sh
-docker compose exec knowledge pyGdbKnowledge sync \
-    --manifest /corpus/corpus.yaml --lock /var/lib/pygdbknowledge/corpus.lock.json --index
+docker compose exec knowledge silicore-knowledge sync \
+    --manifest /corpus/corpus.yaml --lock /var/lib/silicore-knowledge/corpus.lock.json --index
 
 # your own files, mounted read-only for the duration of the command
 docker compose run --rm -v "$PWD/docs:/in:ro" knowledge \
@@ -75,7 +75,7 @@ Other operations: `docker compose logs -f knowledge`, `docker compose down` (dat
 
 Semantic search: put the embedding model in `./models` (a Hugging Face cache layout, prepared
 beforehand because the container never downloads), set `KNOWLEDGE_EMBEDDINGS=true` in `.env`,
-restart, then `docker compose exec knowledge pyGdbKnowledge reindex`.
+restart, then `docker compose exec knowledge silicore-knowledge reindex`.
 
 ## Tokens
 
@@ -99,9 +99,9 @@ openssl rand -hex 32     # run twice: one for read, one for admin
 `settings.yaml` and out of git):
 
 ```sh
-export PYGDBKNOWLEDGE__AUTH__READ_TOKEN=...
-export PYGDBKNOWLEDGE__AUTH__ADMIN_TOKEN=...
-pyGdbKnowledge serve
+export SILICORE_KNOWLEDGE__AUTH__READ_TOKEN=...
+export SILICORE_KNOWLEDGE__AUTH__ADMIN_TOKEN=...
+silicore-knowledge serve
 ```
 
 With Compose, put them in `.env` as `KNOWLEDGE_READ_TOKEN` / `KNOWLEDGE_ADMIN_TOKEN`

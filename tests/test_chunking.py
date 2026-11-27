@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from pyGdbKnowledge.config import IngestionSettings
-from pyGdbKnowledge.ingestion.chunking import chunk_document, infer_peripheral
-from pyGdbKnowledge.ingestion.extract import (
+from silicore_knowledge.config import IngestionSettings
+from silicore_knowledge.ingestion.chunking import chunk_document, infer_peripheral
+from silicore_knowledge.ingestion.extract import (
     ExtractedDocument,
     ExtractedPage,
     ExtractedSection,
 )
-from pyGdbKnowledge.storage.catalog import Catalog
-from pyGdbKnowledge.storage.models import Document, SourceType
+from silicore_knowledge.storage.catalog import Catalog
+from silicore_knowledge.storage.models import Document, SourceType
 
 SETTINGS = IngestionSettings(chunk_max_chars=300, chunk_overlap_chars=60)
 

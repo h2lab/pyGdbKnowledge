@@ -137,6 +137,45 @@ def test_ssdf_question_requires_code_review_evidence(title: str, text: str, rele
 
 
 @pytest.mark.parametrize(
+    ("title", "text", "relevant"),
+    [
+        (
+            "CISA Secure by Design Eliminating Buffer Overflow Vulnerabilities",
+            "Run unit tests with AddressSanitizer to detect buffer overflows.",
+            True,
+        ),
+        (
+            "CISA Secure by Design Eliminating Buffer Overflow Vulnerabilities",
+            "Buffer overflows are memory safety vulnerabilities.",
+            False,
+        ),
+        ("Other security guide", "Run unit tests with AddressSanitizer.", False),
+    ],
+)
+def test_buffer_overflow_question_requires_testing_evidence(
+    title: str, text: str, relevant: bool
+) -> None:
+    """A general warning or another document does not satisfy the CISA question."""
+    questions = load_questions(Path(__file__).parent.parent / "config" / "eval" / "questions.yaml")
+    question = next(q for q in questions if q.id == "cisa-buffer-overflow-tests")
+    document = Document(
+        document_id=title.lower().replace(" ", "-"),
+        title=title,
+        content_hash="e" * 64,
+        source_type=SourceType.OFFICIAL,
+    )
+    chunk = Chunk(
+        chunk_id="example:c2",
+        document_id=document.document_id,
+        ordinal=0,
+        text=text,
+        content_hash="f" * 64,
+    )
+    hit = SearchHit(chunk=chunk, document=document, score=1.0)
+    assert any(expectation.matches(hit) for expectation in question.expect) is relevant
+
+
+@pytest.mark.parametrize(
     "content",
     [
         [{"id": "a", "query": "x", "expect": []}],

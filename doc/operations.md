@@ -72,7 +72,8 @@ types (add the type to the taxonomy first). `keywords` are indexed with the docu
 passages and help queries that use another vocabulary reach it.
 
 The bundled corpus includes NIST SP 800-218 SSDF v1.1 as a high-level secure development
-best-practice guide; it does not provide language-specific coding rules.
+best-practice guide and a CISA/FBI alert on preventing buffer overflows. Neither is a
+language-specific coding reference.
 
 ## Query expansion concepts
 

@@ -33,6 +33,7 @@
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32U5Fx.svd": "11f5f1c8af4ab3465bcd18e4f600b83006a057394463c6fac58943ccff26b551",
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32U5Gx.svd": "b021540badec6e5e6082e0a28bc1cd9c2c9652162d9a074de22b9c97e1fa576e",
   "https://web.cs.dal.ca/~vlado/pl/C_Standard_2011-n1570.pdf": "208969fec021e4f4ce87a1873765298c73e7bbb5209b1c5868967c7adfc8492e",
+  "https://www.cisa.gov/sites/default/files/2025-02/secure-by-design-alert-eliminating-buffer-overflow-vulnerabilities-508c.pdf": "7d8f8598cb678e2fe9b164cd96d2eeba829ae466747876e8e31fdbf8b05e5744",
   "https://www.nxp.com/docs/en/user-guide/UM10204.pdf": "dc91f00f65584e06ef36e26c93bf9d91a95fb3c8a1830a9223e53caf678b36af",
   "https://www.st.com/resource/en/application_note/an4488-getting-started-with-stm32f4xxxx-mcu-hardware-development-stmicroelectronics.pdf": "7704a013f43fc4b5d85e4e91548bc7a578570d8f35dc9b5fada24655768d7655",
   "https://www.st.com/resource/en/application_note/an5373-getting-started-with-stm32u5-mcu-hardware-development-stmicroelectronics.pdf": "03d7110a104179d6ced7633ff3ed56d3445045181943c2df651d1c9dc4daa4b1",

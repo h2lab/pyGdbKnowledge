@@ -20,6 +20,7 @@ allowed_domains:
   - pep257.readthedocs.io
   - raw.githubusercontent.com
   - web.cs.dal.ca
+  - www.cisa.gov
   - www.nxp.com
   - www.st.com
   - www.ti.com
@@ -137,6 +138,16 @@ sources:
         revision: "1.1"
         document_type: best-practice
         keywords: [ssdf, secure software development, software development lifecycle, software security, vulnerability management]
+
+  - name: cisa-memory-safety
+    kind: urls
+    source_type: official
+    documents:
+      - url: https://www.cisa.gov/sites/default/files/2025-02/secure-by-design-alert-eliminating-buffer-overflow-vulnerabilities-508c.pdf
+        title: CISA Secure by Design Eliminating Buffer Overflow Vulnerabilities
+        revision: "2025-02-11"
+        document_type: security-guide
+        keywords: [buffer overflow, memory safety, cwe-119, addresssanitizer, fuzzing, secure development]
 
   # Language references. PEP 257 is classified as an RFC-like proposal, as requested.
   - name: language-references

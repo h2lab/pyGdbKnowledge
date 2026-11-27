@@ -204,6 +204,12 @@ questions:
     expect:
       - document: NIST SP 800-218
         contains: [PW.7.1, code review]
+  - id: cisa-buffer-overflow-tests
+    category: development
+    query: CISA how to detect buffer overflows using unit tests
+    expect:
+      - document: CISA Secure by Design Eliminating Buffer Overflow
+        contains: [unit tests, AddressSanitizer]
   - id: h2lab-secure-update
     category: security
     query: secure maintenance firmware update

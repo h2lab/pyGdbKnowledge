@@ -12,6 +12,7 @@ from ..storage.models import SearchFilters, SearchHit
 MAX_TERMS = 16
 _TERM_RE = re.compile(r"\w+")
 _IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b")
+_NUMBERED_IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9]{2,}[0-9]", re.IGNORECASE)
 # Words present in nearly every chunk (or in no useful way): they only add BM25 noise. A query
 # made only of such words falls back to using them all.
 _STOP_WORDS = frozenset(
@@ -91,6 +92,54 @@ def build_conjunctive_identifier_query(text: str) -> str | None:
     return " AND ".join(terms)
 
 
+def build_numbered_identifier_query(text: str) -> str | None:
+    """Match numbered identifier prefixes and an adjacent contextual phrase.
+
+    The prefix search is only a candidate generator: callers must check that a longer numeric
+    identifier (for example ``USART10``) is not mistaken for the requested ``USART1``.
+
+    Parameters
+    ----------
+    text : str
+        User query.
+
+    Returns
+    -------
+    str | None
+        Bounded FTS5 expression, or None without a numbered identifier and contextual phrase.
+    """
+    match = build_match_query(text)
+    if match is None:
+        return None
+    terms = match.split(" OR ")
+    if len(terms) < 2:
+        return None
+    identifiers = [term for term in terms if _NUMBERED_IDENTIFIER_RE.fullmatch(term[1:-1])]
+    if not identifiers:
+        return None
+    retained = {term[1:-1] for term in terms}
+    words = _TERM_RE.findall(text.lower())
+    phrases: dict[str, None] = {}
+    for first, second in zip(words, words[1:]):
+        if (
+            first in retained
+            and second in retained
+            and first not in _STOP_WORDS
+            and second not in _STOP_WORDS
+            and not _NUMBERED_IDENTIFIER_RE.fullmatch(first)
+            and not _NUMBERED_IDENTIFIER_RE.fullmatch(second)
+            and not _IDENTIFIER_RE.fullmatch(first)
+            and not _IDENTIFIER_RE.fullmatch(second)
+        ):
+            phrases.setdefault(f'"{first} {second}"', None)
+            if len(phrases) == MAX_TERMS:
+                break
+    if not phrases:
+        return None
+    conjunction = " AND ".join(f"{term}*" if term in identifiers else term for term in terms)
+    return f"{conjunction} AND ({' OR '.join(phrases)})"
+
+
 def build_expansion_query(terms: Sequence[str]) -> str | None:
     """Turn controlled expansion terms into a safe FTS5 expression.
 
@@ -148,6 +197,62 @@ def conjunctive_identifier_search(
     if match is None:
         return []
     return catalog.search_chunks(match, filters or SearchFilters(), limit)
+
+
+def numbered_identifier_search(
+    catalog: Catalog, query: str, filters: SearchFilters | None = None, limit: int = 20
+) -> list[SearchHit]:
+    """Find context-matching identifier prefixes without confusing adjacent numbers.
+
+    An exact device-family match can legitimately prefix a numbered device in a section path.
+
+    Parameters
+    ----------
+    catalog : Catalog
+        Catalog holding the FTS5 index.
+    query : str
+        User query.
+    filters : SearchFilters | None
+        Metadata filters.
+    limit : int
+        Maximum number of candidates checked before numeric-boundary validation.
+
+    Returns
+    -------
+    list[SearchHit]
+        Validated candidates ordered by decreasing relevance.
+    """
+    match = build_numbered_identifier_query(query)
+    if match is None:
+        return []
+    terms = build_match_query(query)
+    if terms is None:
+        return []
+    identifiers = [
+        term[1:-1] for term in terms.split(" OR ") if _NUMBERED_IDENTIFIER_RE.fullmatch(term[1:-1])
+    ]
+    patterns = [
+        re.compile(r"(?<!\w)" + re.escape(identifier) + r"(?!\d)", re.IGNORECASE)
+        for identifier in identifiers
+    ]
+    hits = catalog.search_chunks(match, filters or SearchFilters(), limit)
+    results = []
+    for hit in hits:
+        family = (hit.document.device_family or "").lower()
+        indexed_text = " ".join(
+            (
+                hit.chunk.text,
+                hit.chunk.section_path,
+                hit.chunk.peripheral or "",
+                *hit.document.keywords,
+            )
+        )
+        if all(
+            identifier == family or pattern.search(indexed_text)
+            for identifier, pattern in zip(identifiers, patterns, strict=True)
+        ):
+            results.append(hit)
+    return results
 
 
 def lexical_search(

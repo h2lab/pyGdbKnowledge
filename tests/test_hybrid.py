@@ -112,6 +112,57 @@ def test_identifier_with_unmatched_terms_preserves_existing_results(catalog: Cat
     )
 
 
+def test_numbered_identifier_with_context_reaches_suffixed_field(catalog: Catalog) -> None:
+    """A numbered identifier and its context can find a field containing a suffix."""
+    catalog.add_document(
+        Document(
+            document_id="u5",
+            title="STM32U595 SVD",
+            content_hash="d" * 64,
+            source_type=SourceType.VENDOR,
+            device_family="STM32U5",
+        )
+    )
+    section = Section(
+        document_id="u5", section_id="rcc", title="RCC", path="STM32U595 > RCC", ordinal=0
+    )
+    texts = (
+        [
+            "RCC peripherals independent clock configuration USART1SEL USART1 clock source selection"
+            for _ in range(20)
+        ]
+        + [
+            "RCC APB2 peripheral clock enable register USART1EN USART1clock enable",
+            "RCC APB2 peripheral clock enable register USART10EN USART10clock enable",
+        ]
+        + ["RCC APB2 peripheral clock enable register SPI1EN SPI1 clock enable" for _ in range(100)]
+        + [
+            "RCC APB2 peripheral clocks enable in Sleep mode USART1SMEN USART1 clocks enable"
+            for _ in range(20)
+        ]
+    )
+    chunks = [
+        Chunk(
+            chunk_id=f"u5:{i:02}",
+            document_id="u5",
+            section_id="rcc",
+            ordinal=i,
+            text=text,
+            content_hash="e" * 64,
+            section_path=section.path,
+            peripheral="RCC",
+        )
+        for i, text in enumerate(texts)
+    ]
+    catalog.replace_content("u5", [section], chunks)
+    hits = HybridSearcher(catalog).search(
+        "how to enable the USART1 peripheral clock on STM32U5", SearchFilters(), 5
+    )
+    assert any("USART1EN" in hit.chunk.text for hit in hits)
+    assert all("USART10EN" not in hit.chunk.text for hit in hits)
+    assert all("USART1SMEN" not in hit.chunk.text for hit in hits)
+
+
 def test_source_reliability_breaks_ties(catalog: Catalog, store: InMemoryVectorStore) -> None:
     """Official and community chunks ranked equally: official wins, with full score."""
     searcher = HybridSearcher(catalog, StubEmbedder((1.0, 0.0)), store)

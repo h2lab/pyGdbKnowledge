@@ -120,6 +120,11 @@ ranking rewards passages matching all retained terms. It is a bonus rather than 
 modality, so it does not lower existing scores. If no passage matches the conjunction, ordinary
 lexical, identifier and vector search remain available.
 
+For numbered identifiers without underscores, a second bounded bonus searches prefixes only
+when all retained terms and an adjacent contextual phrase match. Candidate validation excludes
+longer numbers (such as `USART10` for `USART1`); an exact device-family match may instead prefix
+a device name. These are heuristic matches, not a guarantee of semantic relevance.
+
 Controlled query expansion closes the vocabulary gap between a technical intent and the
 documents: `config/concepts.yaml` (set through `retrieval.concepts_path`) declares concepts
 with their retrieval terms, optional activation triggers, and related concepts (for example

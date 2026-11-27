@@ -97,7 +97,9 @@ SVD documents as well to apply the chunk size limit to long descriptions. Reinde
 chunk IDs and search rankings.
 
 Identifier queries with additional terms also receive a lexical bonus for passages matching all
-retained terms. This ranking change does not require reindexing.
+retained terms. Queries with numbered identifiers and an adjacent contextual phrase can also
+match suffixed identifiers, while distinguishing adjacent numbers. These ranking changes do not
+require reindexing.
 
 ## Embedding model versions
 

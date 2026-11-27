@@ -14,8 +14,10 @@ from silicore_knowledge.retrieval.lexical_search import (
     build_expansion_query,
     build_identifier_query,
     build_match_query,
+    build_numbered_identifier_query,
     conjunctive_identifier_search,
     lexical_search,
+    numbered_identifier_search,
 )
 from silicore_knowledge.storage.catalog import Catalog
 from silicore_knowledge.storage.models import (
@@ -215,6 +217,52 @@ def test_conjunctive_identifier_search_enforces_filters_and_quarantine(catalog: 
         catalog, "USART_ISR flags", SearchFilters(manufacturer="NXP")
     )
     assert not conjunctive_identifier_search(catalog, "USART_ISR ignore")
+
+
+def test_numbered_identifier_query_requires_a_context_phrase_and_escapes_input() -> None:
+    """Only numbered identifiers with adjacent context get a bounded prefix query."""
+    assert build_numbered_identifier_query('USART1 peripheral clock"*') == (
+        '"usart1"* AND "peripheral" AND "clock" AND ("peripheral clock")'
+    )
+    assert build_numbered_identifier_query("USART1 the clock") is None
+    assert build_numbered_identifier_query("USART_ISR peripheral clock") is None
+    assert build_numbered_identifier_query("USART1") is None
+    assert (
+        build_numbered_identifier_query(
+            " ".join(f"term{i}" for i in range(MAX_TERMS)) + " USART1 peripheral clock"
+        )
+        is None
+    )
+
+
+def test_numbered_identifier_search_filters_adjacent_numbers_and_quarantine(
+    catalog: Catalog,
+) -> None:
+    """Prefix candidates respect numeric boundaries, metadata filters and quarantine."""
+    _add(
+        catalog,
+        "rcc",
+        [
+            "peripheral clock enable: USART1EN",
+            "peripheral clock enable: USART10EN",
+        ],
+        content_hash="4" * 64,
+        manufacturer="ST",
+        peripheral="RCC",
+    )
+    _add(
+        catalog,
+        "hidden",
+        ["peripheral clock enable: USART1EN"],
+        content_hash="5" * 64,
+        status=DocumentStatus.QUARANTINED,
+        manufacturer="ST",
+        peripheral="RCC",
+    )
+    query = "USART1 peripheral clock enable"
+    hits = numbered_identifier_search(catalog, query, SearchFilters(manufacturer="ST"))
+    assert [hit.chunk.chunk_id for hit in hits] == ["rcc:0"]
+    assert not numbered_identifier_search(catalog, query, SearchFilters(manufacturer="NXP"))
 
 
 def test_build_expansion_query_quotes_terms_as_phrases() -> None:

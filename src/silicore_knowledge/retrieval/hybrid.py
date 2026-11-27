@@ -15,6 +15,7 @@ from .lexical_search import (
     expansion_search,
     identifier_search,
     lexical_search,
+    numbered_identifier_search,
 )
 from .vector_store import VectorStore, VectorStoreError
 
@@ -106,6 +107,9 @@ class HybridSearcher:
             conjunction = conjunctive_identifier_search(self._catalog, query, filters, candidates)
             if conjunction:
                 rankings.append((conjunction, 1.0, False))
+        numbered = numbered_identifier_search(self._catalog, query, filters, MAX_CANDIDATES)
+        if numbered:
+            rankings.append((numbered[:candidates], 1.0, False))
         expansion = self._expansion_ranking(query, filters, candidates)
         if expansion:
             rankings.append((expansion, EXPANSION_RRF_WEIGHT, False))

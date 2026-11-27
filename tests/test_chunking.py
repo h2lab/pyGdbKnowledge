@@ -104,6 +104,46 @@ def test_chunks_respect_size_and_overlap_for_prose() -> None:
     assert len(first[-1]) <= 60
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        " ".join(f"word{i:03}" for i in range(100)),
+        "x" * 800,
+        "Bit 7 FIELD: " + "y" * 800,
+    ],
+)
+def test_oversize_line_is_split_without_losing_text(line: str) -> None:
+    """A single extracted line cannot bypass the configured chunk size."""
+    settings = IngestionSettings(chunk_max_chars=300, chunk_overlap_chars=0)
+    document = _doc([line], [(1, "P", "P", 1, 1)])
+    chunks = chunk_document("ds", document, settings).chunks
+    assert len(chunks) > 1
+    assert all(len(chunk.text) <= settings.chunk_max_chars for chunk in chunks)
+    assert "".join(chunk.text.replace(" ", "") for chunk in chunks) == line.replace(" ", "")
+    assert all(chunk.page == 1 and chunk.section_path == "P" for chunk in chunks)
+
+
+def test_oversize_line_prefers_word_boundaries_with_overlap() -> None:
+    """Splitting long prose keeps words intact and works with preceding and following lines."""
+    words = [f"word{i:03}" for i in range(100)]
+    document = _doc(
+        ["before\n" + " ".join(words) + "\nafter"],
+        [(1, "P", "P", 1, 1)],
+    )
+    chunks = chunk_document("ds", document, SETTINGS).chunks
+    assert all(len(chunk.text) <= SETTINGS.chunk_max_chars for chunk in chunks)
+    assert set(words).issubset({word for chunk in chunks for word in chunk.text.split()})
+    assert chunks[0].text.startswith("before")
+    assert chunks[-1].text.endswith("after")
+
+
+def test_line_at_size_limit_remains_intact() -> None:
+    """A line that already fits is not split."""
+    document = _doc(["x" * 300], [(1, "P", "P", 1, 1)])
+    (chunk,) = chunk_document("ds", document, SETTINGS).chunks
+    assert chunk.text == "x" * 300
+
+
 def test_chunks_preserve_pages_and_do_not_overlap_across_page_boundaries(tmp_path: Path) -> None:
     """A search hit cites the page that actually contains its text."""
     first_page = "\n".join(f"First page line {i:02} " + "x" * 40 for i in range(8))

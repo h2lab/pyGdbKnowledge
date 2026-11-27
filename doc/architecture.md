@@ -85,7 +85,9 @@ local file -> validation + SHA-256 + duplicate/version detection
 - Chunking follows document structure (sections, registers and bit fields, tables), keeps
   section path, page and peripheral context, limits overlap, and uses stable chunk ids. PDF
   chunks never cross a page boundary, so each passage's page identifies all of its text;
-  structures continuing across pages are consequently split at that boundary.
+  structures continuing across pages are consequently split at that boundary. Oversize PDF
+  lines are split at spaces where possible, or within a long token when necessary, to keep
+  each passage within the configured chunk size.
 - Unknown metadata stays null; values are never invented.
 - Operator-supplied `keywords` (manifest entries, CLI `--keyword`, admin API) are stored on the
   document and indexed with its passages, so a query can reach a document whose body uses

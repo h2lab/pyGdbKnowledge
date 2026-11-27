@@ -90,7 +90,8 @@ verification vocabulary without broadening other lifecycle-security queries.
 
 SQLite and Qdrant are derived data: both can be rebuilt from `documents/` alone.
 PDF chunks now stay within individual pages, so older indexes should be rebuilt with
-`reindex` to correct their page citations. Reindexing can change chunk IDs and search rankings.
+`reindex` to correct their page citations. Reindexing also applies the size limit to previously
+oversized single-line PDF passages. It can change chunk IDs and search rankings.
 
 ## Embedding model versions
 

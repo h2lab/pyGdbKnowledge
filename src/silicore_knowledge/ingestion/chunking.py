@@ -192,7 +192,7 @@ def _tail(lines: list[_Line], budget: int) -> list[_Line]:
 
 
 def _split_block(block: _Block, max_chars: int, overlap: int) -> list[list[_Line]]:
-    """Return the block as one part, or several line-aligned parts when it is oversize.
+    """Split an oversize block by line, and exceptionally long lines by character.
 
     Parts leave room for the overlap carried over from the previous chunk.
     """
@@ -201,12 +201,29 @@ def _split_block(block: _Block, max_chars: int, overlap: int) -> list[list[_Line
     limit = max_chars - overlap
     parts: list[list[_Line]] = []
     piece: list[_Line] = []
+    lines: list[_Line] = []
     for line in block.lines:
+        if len(line.text) <= max_chars:
+            lines.append(line)
+            continue
+        start = 0
+        while start < len(line.text):
+            end = min(start + limit - 1, len(line.text))
+            if end < len(line.text):
+                space = line.text.rfind(" ", start + 1, end)
+                if space != -1:
+                    end = space + 1
+            text = line.text[start:end]
+            if text.strip():
+                lines.append(_Line(line.page, text))
+            start = end
+    for line in lines:
         if piece and _size(piece) + len(line.text) + 1 > limit:
             parts.append(piece)
             piece = []
         piece.append(line)
-    parts.append(piece)
+    if piece:
+        parts.append(piece)
     return parts
 
 

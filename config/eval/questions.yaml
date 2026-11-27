@@ -4,8 +4,10 @@
 # Pilot evaluation questions for `silicore-knowledge evaluate`.
 # Each question lists the evidence a correct answer needs; `document` is matched against the
 # document id, title and device, `contains` against the chunk text (case-insensitive).
-# Categories describe the domain under evaluation (register, bitfield, hardware, intent,
-# security, architecture, development, language, assembly, protocol and peripheral).
+# Each `expect` entry is an acceptable alternative; all its criteria must match.
+# Categories describe the domain under evaluation (register, address, bitfield, dma, timing,
+# hardware, errata, cross, intent, security, architecture, development, language, assembly,
+# protocol, peripheral and fpga).
 # Gap: only one errata sheet (ES0182, STM32F407) in the pilot corpus.
 
 questions:
@@ -200,6 +202,12 @@ questions:
   - id: arm-den0107-secure-boot
     category: security
     query: requirements for secure boot chain of trust
+    expect:
+      - document: Arm DEN0107
+        contains: [image integrity]
+  - id: intent-modified-firmware
+    category: intent
+    query: prevent modified firmware from executing after reset
     expect:
       - document: Arm DEN0107
         contains: [image integrity]

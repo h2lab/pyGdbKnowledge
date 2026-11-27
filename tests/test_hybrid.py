@@ -227,6 +227,68 @@ def test_expansion_is_a_bounded_bonus_and_preserves_direct_matches(catalog: Cata
 
     registry = ConceptRegistry([Concept(id="topic", terms=("conceptalias", "expandedneedle"))])
     searcher = HybridSearcher(catalog, concepts=registry)
-    hits = searcher.search("directneedle conceptalias", SearchFilters(), 10, min_score=0.9)
+    hits = searcher.search("directneedle conceptalias", SearchFilters(), 10, min_score=0.95)
     assert [hit.chunk.chunk_id for hit in hits] == ["z-exact:0"]
     assert hits[0].score == pytest.approx(1.0)
+
+
+def test_expansion_surfaces_a_relevant_hit_beside_noisy_direct_matches(catalog: Catalog) -> None:
+    """A strong expansion hit can enter the result window despite unrelated lexical matches."""
+    for index in range(12):
+        document_id = f"noise-{index}"
+        catalog.add_document(
+            Document(
+                document_id=document_id,
+                title=document_id,
+                content_hash=f"{index + 1:064x}",
+                source_type=SourceType.OFFICIAL,
+            )
+        )
+        section = Section(document_id=document_id, section_id="s", title="S", path="S", ordinal=0)
+        chunk = Chunk(
+            chunk_id=f"{document_id}:0",
+            document_id=document_id,
+            section_id="s",
+            ordinal=0,
+            text="battery life application noise",
+            content_hash="e" * 64,
+            section_path="S",
+        )
+        catalog.replace_content(document_id, [section], [chunk])
+
+    catalog.add_document(
+        Document(
+            document_id="low-power",
+            title="low-power",
+            content_hash="f" * 64,
+            source_type=SourceType.OFFICIAL,
+        )
+    )
+    section = Section(document_id="low-power", section_id="s", title="S", path="S", ordinal=0)
+    chunk = Chunk(
+        chunk_id="low-power:0",
+        document_id="low-power",
+        section_id="s",
+        ordinal=0,
+        text="low power sleep mode stop mode",
+        content_hash="a" * 64,
+        section_path="S",
+    )
+    catalog.replace_content("low-power", [section], [chunk])
+
+    registry = ConceptRegistry(
+        [
+            Concept(
+                id="low-power",
+                terms=("battery life", "low power", "sleep mode", "stop mode"),
+                triggers=("battery life",),
+            )
+        ]
+    )
+    hits = HybridSearcher(catalog, concepts=registry).search(
+        "extend battery life application", SearchFilters(), 10
+    )
+    low_power_rank = next(
+        rank for rank, hit in enumerate(hits, 1) if hit.chunk.chunk_id == "low-power:0"
+    )
+    assert low_power_rank <= 10

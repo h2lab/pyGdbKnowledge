@@ -18,7 +18,7 @@ logger = logging.getLogger("silicore_knowledge")
 RRF_K = 60
 CANDIDATE_FACTOR = 5
 MAX_CANDIDATES = 200
-EXPANSION_RRF_WEIGHT = 0.25
+EXPANSION_RRF_WEIGHT = 0.9
 
 # Multiplier applied per source reliability class; official documents rank first.
 DEFAULT_SOURCE_WEIGHTS: Mapping[SourceType, float] = {

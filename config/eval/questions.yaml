@@ -162,7 +162,11 @@ questions:
   - id: intent-field-update
     category: intent
     query: update the firmware of a deployed device in the field
-    expect: [{contains: ["bootloader"]}, {contains: ["DFU"]}, {contains: ["flash programming"]}]
+    expect:
+      - {document: Arm DEN0107, contains: ["secure firmware update"]}
+      - {contains: ["bootloader"]}
+      - {contains: ["DFU"]}
+      - {contains: ["flash programming"]}
   - id: intent-battery-life
     category: intent
     query: extend the battery life of the application

@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Concept registry for controlled query expansion (see doc/architecture.md).
-# A concept lists the terms a technical intent may hide behind; when a query uses one of
-# them, the others (and the terms of `related` concepts, one hop) are added as an extra
-# lexical ranking. Expansion is bounded and comes from this reviewed file only.
+# `terms` are retrieval vocabulary; optional `triggers` narrow which query phrases activate a
+# concept. When omitted, `terms` also act as triggers. Other terms (and related concepts one hop)
+# are added as an extra lexical ranking. Expansion is bounded and configured here only.
 
 concepts:
   - id: debug-access
@@ -55,6 +55,16 @@ concepts:
   - id: clock-configuration
     label: Clock configuration
     terms:
+      - clock configuration
+      - system clock
+      - clock tree
+      - PLL
+      - prescaler
+      - clock source
+      - oscillator
+      - HSE
+      - HSI
+    triggers:
       - system clock
       - clock tree
       - PLL
@@ -75,6 +85,11 @@ concepts:
       - shutdown mode
       - wakeup
       - power consumption
+    triggers:
+      - battery life
+      - battery runtime
+      - extend battery life
+      - reduce energy use
 
   - id: serial-uart
     label: Asynchronous serial communication
@@ -83,6 +98,11 @@ concepts:
   - id: dma-transfer
     label: Direct memory access
     terms: [DMA, direct memory access, DMA stream, DMA channel, scatter-gather]
+    triggers:
+      - direct memory access
+      - scatter-gather
+      - transfer data without CPU intervention
+      - offload data transfers from the CPU
 
   - id: formal-verification
     label: Formal verification of C code
@@ -107,4 +127,8 @@ concepts:
       - IAP
       - DFU
       - flash programming
+    triggers:
+      - update the firmware
+      - update a deployed device
+      - update a device in the field
     related: [lifecycle-security]

@@ -106,10 +106,11 @@ No LLM reranker until retrieval quality has been measured.
 
 Controlled query expansion closes the vocabulary gap between a technical intent and the
 documents: `config/concepts.yaml` (set through `retrieval.concepts_path`) declares concepts
-with their aliases, acronyms and related concepts (for example firmware extraction → readout
-protection, RDP, JTAG, SWD, debug authentication). When a query names a concept, the other
-terms form one extra lexical ranking in the fusion. Expansion is declarative, reviewed with
-the configuration, bounded in matched concepts and added terms, and never derived from the
+with their retrieval terms, optional activation triggers, and related concepts (for example
+firmware extraction → readout protection, RDP, JTAG, SWD, debug authentication). When a query
+matches a trigger, the other terms form one extra lexical ranking in the fusion. If no triggers
+are specified, the retrieval terms also activate the concept. Expansion is declarative, reviewed
+with the configuration, bounded in matched concepts and added terms, and never derived from the
 query or a model (ANSSI R27). Its RRF contribution is lower than a direct lexical, identifier
 or vector match; it acts as a bonus and does not reduce existing normalized scores. The
 `intent` category of `config/eval/questions.yaml` measures its effect.

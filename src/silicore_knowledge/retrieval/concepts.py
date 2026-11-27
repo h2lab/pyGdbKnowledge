@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-"""Concept registry: declarative aliases, acronyms and related terms for query expansion.
+"""Concept registry: declarative triggers, aliases, acronyms and related terms.
 
-A concept groups the terms a technical intent may hide behind (``JTAG``, ``SWD``, ``readout
-protection`` for firmware extraction). Expansion is controlled: it comes from a reviewed
-configuration file, never from the query or from a model, and it is bounded in every
-dimension (ANSSI R27).
+A concept groups retrieval terms a technical intent may hide behind (``JTAG``, ``SWD``,
+``readout protection`` for firmware extraction). Optional triggers can narrow which query
+phrases activate those terms. Expansion is controlled: it comes from a reviewed configuration
+file, never from the query or from a model, and it is bounded in every dimension (ANSSI R27).
 """
 
 import re
@@ -32,11 +32,12 @@ class _Model(BaseModel):
 
 
 class Concept(_Model):
-    """One concept: the terms that name it and the concepts it relates to."""
+    """One concept's retrieval terms, optional query triggers and related concepts."""
 
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,47}$")
     label: str | None = Field(default=None, max_length=120)
     terms: tuple[_Term, ...] = Field(min_length=1, max_length=16)
+    triggers: tuple[_Term, ...] = Field(default=(), max_length=16)
     related: tuple[Annotated[str, StringConstraints(min_length=1, max_length=48)], ...] = Field(
         default=(), max_length=8
     )
@@ -81,16 +82,22 @@ class ConceptRegistry:
             concept.id: tuple((term, _term_pattern(term)) for term in concept.terms)
             for concept in concepts
         }
+        self._triggers: dict[str, tuple[tuple[str, re.Pattern[str]], ...]] = {
+            concept.id: tuple(
+                (term, _term_pattern(term)) for term in (concept.triggers or concept.terms)
+            )
+            for concept in concepts
+        }
 
     def __len__(self) -> int:
         """Return the number of registered concepts."""
         return len(self._by_id)
 
     def match(self, text: str) -> tuple[Concept, ...]:
-        """Return the concepts whose terms appear in ``text``, bounded, in registry order."""
+        """Return concepts whose triggers (or terms) appear in ``text``, in registry order."""
         matched: list[Concept] = []
         for concept in self._by_id.values():
-            if any(pattern.search(text) for _, pattern in self._terms[concept.id]):
+            if any(pattern.search(text) for _, pattern in self._triggers[concept.id]):
                 matched.append(concept)
                 if len(matched) == MAX_MATCHED_CONCEPTS:
                     break

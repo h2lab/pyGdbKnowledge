@@ -60,6 +60,25 @@ def test_expansion_is_bounded() -> None:
     assert len(registry.expansion_terms(query)) == MAX_EXPANSION_TERMS
 
 
+def test_triggers_narrow_matching_without_restricting_retrieval_terms() -> None:
+    """A concept can match intent wording and still expand to its technical vocabulary."""
+    registry = ConceptRegistry(
+        [
+            Concept(
+                id="dma-transfer",
+                terms=("DMA", "direct memory access", "DMA stream"),
+                triggers=("transfer data without CPU intervention",),
+            )
+        ]
+    )
+    assert registry.match("DMA stream FIFO control register") == ()
+    assert set(registry.expansion_terms("transfer data without CPU intervention")) == {
+        "DMA",
+        "direct memory access",
+        "DMA stream",
+    }
+
+
 def test_inconsistent_registries_are_rejected() -> None:
     """Duplicate ids and unknown related ids raise ConceptError."""
     concept = Concept(id="a", terms=("x",))
@@ -99,10 +118,16 @@ def test_repository_concepts_avoid_expanding_precise_register_queries() -> None:
     assert (
         registry.expansion_terms("RCC peripherals independent clock configuration register") == ()
     )
+    assert (
+        registry.expansion_terms("DMA stream x FIFO control register channel selection CHSEL") == ()
+    )
+    assert registry.expansion_terms("secure maintenance firmware update") == ()
+    assert registry.expansion_terms("stop mode") == ()
     assert registry.expansion_terms("configure the system clock")
     assert {"JTAG", "SWD"} <= set(registry.expansion_terms("lock the debug interface"))
     assert registry.expansion_terms("update the firmware in the field")
     assert registry.expansion_terms("extend the battery life")
+    assert "DMA" in registry.expansion_terms("transfer data without CPU intervention")
 
 
 def test_repository_concepts_map_physical_intrusion_to_hardware_security_terms() -> None:

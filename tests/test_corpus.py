@@ -14,7 +14,8 @@ from pdfmaker import make_pdf
 
 from silicore_knowledge import cli
 from silicore_knowledge.corpus.fetch import HttpFetcher, check_url
-from silicore_knowledge.corpus.manifest import CorpusError, load_manifest
+from silicore_knowledge.corpus.manifest import CorpusError, UrlSource, load_manifest
+from silicore_knowledge.corpus.taxonomy import load_taxonomy
 from silicore_knowledge.corpus.sync import LockFile, plan_sync, run_sync
 from silicore_knowledge.storage.catalog import Catalog
 from silicore_knowledge.workspace import Workspace
@@ -273,273 +274,124 @@ def test_family_pattern_sets_the_device_family(tmp_path: Path) -> None:
     assert {p.metadata.device_family for p in plans} == {"STM32A", "STM32B"}
 
 
-def test_new_document_types_are_accepted(tmp_path: Path) -> None:
-    """The manifest accepts a technical guide and its keywords."""
+def test_document_entries_accept_generic_types_and_keywords(tmp_path: Path) -> None:
+    """Every taxonomy-style document type and its keywords validate and are preserved."""
     documents = [
         {
-            "url": "https://www.st.com/resource/en/application_note/an5373-getting-started-with-stm32u5-mcu-hardware-development-stmicroelectronics.pdf",
-            "title": "AN5373 Getting started with STM32U5 MCU hardware development",
-            "device_family": "STM32U5",
-            "document_type": "technical-guide",
-            "keywords": ["getting started", "stm32u5", "hardware development", "mcu", "embedded"],
+            "url": f"https://www.st.com/resource/en/doc/{name}.pdf",
+            "title": name,
+            "document_type": name,
+            "keywords": ["getting started", name],
         }
+        for name in (
+            "technical-guide",
+            "requirement-document",
+            "datasheet",
+            "specification",
+            "best-practice",
+        )
     ]
-
     manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "technical-guide"
-    assert document["keywords"] == [
-        "getting started",
-        "stm32u5",
-        "hardware development",
-        "mcu",
-        "embedded",
-    ]
-
-
-def test_requirement_document_type_support(tmp_path: Path) -> None:
-    """The manifest accepts requirement documents."""
-    documents = [
-        {
-            "url": "https://www.st.com/resource/en/technical_report/tr1234-stm32u5-functional-requirements.pdf",
-            "title": "STM32U5 Functional Requirements",
-            "device_family": "STM32U5",
-            "document_type": "requirement-document",
-            "keywords": [
-                "requirement",
-                "specification",
-                "functional",
-                "non-functional",
-                "compliance",
-            ],
-        }
-    ]
-
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "requirement-document"
-    assert document["keywords"] == [
-        "requirement",
-        "specification",
-        "functional",
-        "non-functional",
-        "compliance",
-    ]
-
-
-def test_hardware_datasheet_support(tmp_path: Path) -> None:
-    """The manifest accepts hardware datasheets."""
-    documents = [
-        {
-            "url": "https://www.st.com/resource/en/datasheet/stm32u595xx.pdf",
-            "title": "STM32U595xx Datasheet",
-            "device_family": "STM32U5",
-            "document_type": "datasheet",
-            "keywords": ["datasheet", "specification", "electrical", "timing", "pinout"],
-        }
-    ]
-
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "datasheet"
-    assert document["keywords"] == ["datasheet", "specification", "electrical", "timing", "pinout"]
-
-
-def test_specification_document_support(tmp_path: Path) -> None:
-    """The manifest accepts specification documents."""
-    documents = [
-        {
-            "url": "https://www.arm.com/specifications/arm-cortex-m-architecture.pdf",
-            "title": "ARM Cortex-M Architecture Specification",
-            "device_family": "Cortex-M",
-            "document_type": "specification",
-            "keywords": ["specification", "standard", "protocol", "interface", "compliance"],
-        }
-    ]
-
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "specification"
-    assert document["keywords"] == [
-        "specification",
-        "standard",
-        "protocol",
-        "interface",
-        "compliance",
-    ]
-
-
-def test_best_practice_guide_support(tmp_path: Path) -> None:
-    """The manifest accepts best-practice guides."""
-    documents = [
-        {
-            "url": "https://www.st.com/resource/en/application_note/an5373-best-practices-for-stm32u5-development.pdf",
-            "title": "STM32U5 Development Best Practices",
-            "device_family": "STM32U5",
-            "document_type": "best-practice",
-            "keywords": [
-                "best practice",
-                "guideline",
-                "recommendation",
-                "development",
-                "security",
-            ],
-        }
-    ]
-
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "best-practice"
-    assert document["keywords"] == [
-        "best practice",
-        "guideline",
-        "recommendation",
-        "development",
-        "security",
-    ]
-
-
-def test_backward_compatibility_with_existing_documents(tmp_path: Path) -> None:
-    """Existing document types remain valid without keywords."""
-    documents = [
-        {
-            "url": "https://www.st.com/resource/en/datasheet/ds.pdf",
-            "title": "DS",
-            "document_type": "datasheet",
-        }
-    ]
-
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "datasheet"
-
-
-def test_all_new_document_types_in_single_manifest(tmp_path: Path) -> None:
-    """The manifest accepts all new document types together."""
-    documents = [
-        {
-            "url": "https://www.st.com/resource/en/application_note/an5373-getting-started-with-stm32u5-mcu-hardware-development-stmicroelectronics.pdf",
-            "title": "AN5373 Getting started with STM32U5 MCU hardware development",
-            "device_family": "STM32U5",
-            "document_type": "technical-guide",
-            "keywords": ["getting started", "stm32u5", "hardware development", "mcu", "embedded"],
-        },
-        {
-            "url": "https://www.st.com/resource/en/technical_report/tr1234-stm32u5-functional-requirements.pdf",
-            "title": "STM32U5 Functional Requirements",
-            "device_family": "STM32U5",
-            "document_type": "requirement-document",
-            "keywords": [
-                "requirement",
-                "specification",
-                "functional",
-                "non-functional",
-                "compliance",
-            ],
-        },
-        {
-            "url": "https://www.st.com/resource/en/datasheet/stm32u595xx.pdf",
-            "title": "STM32U595xx Datasheet",
-            "device_family": "STM32U5",
-            "document_type": "datasheet",
-            "keywords": ["datasheet", "specification", "electrical", "timing", "pinout"],
-        },
-        {
-            "url": "https://www.arm.com/specifications/arm-cortex-m-architecture.pdf",
-            "title": "ARM Cortex-M Architecture Specification",
-            "device_family": "Cortex-M",
-            "document_type": "specification",
-            "keywords": ["specification", "standard", "protocol", "interface", "compliance"],
-        },
-        {
-            "url": "https://www.st.com/resource/en/application_note/an5373-best-practices-for-stm32u5-development.pdf",
-            "title": "STM32U5 Development Best Practices",
-            "device_family": "STM32U5",
-            "document_type": "best-practice",
-            "keywords": [
-                "best practice",
-                "guideline",
-                "recommendation",
-                "development",
-                "security",
-            ],
-        },
-    ]
-
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    manifest_documents = manifest.sources[1]["documents"]
-    assert len(manifest_documents) == 5
-    assert {document["document_type"] for document in manifest_documents} == {
+    source = manifest.sources[1]
+    assert isinstance(source, UrlSource)
+    assert {entry.document_type for entry in source.documents} == {
         "technical-guide",
         "requirement-document",
         "datasheet",
         "specification",
         "best-practice",
     }
-    assert all(document.keywords for document in manifest_documents)
+    for entry in source.documents:
+        assert entry.keywords == ("getting started", entry.document_type)
 
 
-def test_keyword_enhanced_retrieval_support(tmp_path: Path) -> None:
-    """Keywords are preserved in validated manifest entries."""
+def test_keywords_are_optional_and_bounded(tmp_path: Path) -> None:
+    """Missing or empty keywords stay empty; oversize keyword lists are rejected."""
     documents = [
-        {
-            "url": "https://www.st.com/resource/en/application_note/an5373-getting-started-with-stm32u5-mcu-hardware-development-stmicroelectronics.pdf",
-            "title": "AN5373 Getting started with STM32U5 MCU hardware development",
-            "device_family": "STM32U5",
-            "document_type": "technical-guide",
-            "keywords": ["getting started", "stm32u5", "hardware development", "mcu", "embedded"],
-        },
-        {
-            "url": "https://www.st.com/resource/en/technical_report/tr1234-stm32u5-functional-requirements.pdf",
-            "title": "STM32U5 Functional Requirements",
-            "device_family": "STM32U5",
-            "document_type": "requirement-document",
-            "keywords": [
-                "requirement",
-                "specification",
-                "functional",
-                "non-functional",
-                "compliance",
-            ],
-        },
+        {"url": "https://www.st.com/a.pdf", "document_type": "datasheet"},
+        {"url": "https://www.st.com/b.pdf", "document_type": "datasheet", "keywords": []},
     ]
-
     manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    for document in manifest.sources[1]["documents"]:
-        assert document.keywords
-        assert isinstance(document.keywords, list)
+    source = manifest.sources[1]
+    assert isinstance(source, UrlSource)
+    assert all(entry.keywords == () for entry in source.documents)
+    too_many = [{"url": "https://www.st.com/c.pdf", "keywords": [f"k{i}" for i in range(17)]}]
+    with pytest.raises(CorpusError, match="keywords"):
+        load_manifest(write_manifest(tmp_path / "d.yaml", too_many))
 
 
-def test_empty_keywords_allowed(tmp_path: Path) -> None:
-    """An empty keywords list is accepted."""
+def test_sync_passes_keywords_to_the_import_metadata(tmp_path: Path) -> None:
+    """Keywords listed in the manifest reach the catalog through the import path."""
+    pdf = make_pdf(tmp_path / "ds.pdf", ["USART_ISR text"], [[1, "1 USART", 1]]).read_bytes()
+    url = "https://www.st.com/resource/en/datasheet/kw.pdf"
     documents = [
         {
-            "url": "https://www.st.com/resource/en/datasheet/stm32u595xx.pdf",
-            "title": "STM32U595xx Datasheet",
-            "device_family": "STM32U5",
+            "url": url,
+            "title": "KW",
             "document_type": "datasheet",
-            "keywords": [],
+            "keywords": ["readout protection", "rdp"],
         }
     ]
+    env = Sync(tmp_path, documents, FakeFetcher({url: pdf}))
+    plans = plan_sync(env.manifest, env.fetcher, 10_000_000)
+    assert plans[0].metadata.keywords == ("readout protection", "rdp")
+    report = env.run()
+    assert len(report.imported) == 1
+    document = env.catalog.get_document(report.imported[0])
+    assert document is not None and document.keywords == ("readout protection", "rdp")
 
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "datasheet"
-    assert document["keywords"] == []
+
+def test_repository_corpus_manifest_is_valid() -> None:
+    """The manifest shipped in config/ must stay loadable by `sync`."""
+    manifest = load_manifest(Path(__file__).parent.parent / "config" / "corpus.yaml")
+    assert len(manifest.allowed_domains) == len({d.lower() for d in manifest.allowed_domains})
+    assert {source.name for source in manifest.sources} >= {"cmsis-svd", "st-documents"}
 
 
-def test_missing_keywords_field_allowed(tmp_path: Path) -> None:
-    """Omitting keywords remains backward compatible."""
-    documents = [
-        {
-            "url": "https://www.st.com/resource/en/datasheet/stm32u595xx.pdf",
-            "title": "STM32U595xx Datasheet",
-            "device_family": "STM32U5",
-            "document_type": "datasheet",
-        }
-    ]
+def test_repository_taxonomy_covers_the_corpus_manifest() -> None:
+    """Every document type used by config/corpus.yaml is declared in config/taxonomy.yaml."""
+    config = Path(__file__).parent.parent / "config"
+    manifest = load_manifest(config / "corpus.yaml")
+    taxonomy = load_taxonomy(config / "taxonomy.yaml")
+    assert taxonomy.unknown_document_types(manifest) == []
 
-    manifest = load_manifest(write_manifest(tmp_path / "c.yaml", documents))
-    document = manifest.sources[1]["documents"][0]
-    assert document["document_type"] == "datasheet"
-    assert document["keywords"] == []
+
+def test_cli_sync_warns_about_unknown_document_types(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unknown document_type triggers a warning, not a failure; a bad taxonomy fails."""
+    env = scenario(tmp_path)
+    manifest = write_manifest(
+        tmp_path / "m.yaml",
+        [
+            {
+                "url": "https://www.st.com/resource/en/datasheet/ds.pdf",
+                "document_type": "mystery-type",
+            }
+        ],
+    )
+    (tmp_path / "taxonomy.yaml").write_text(
+        "document_types: [{name: datasheet}]\n", encoding="utf-8"
+    )
+    config = tmp_path / "settings.yaml"
+    config.write_text(yaml.safe_dump({"workspace": str(tmp_path / "cli-ws")}), encoding="utf-8")
+    args = cli._parser().parse_args(  # noqa: SLF001
+        ["sync", "--manifest", str(manifest), "--config", str(config), "--dry-run"]
+    )
+    assert cli._sync(args, env.fetcher) == 0  # noqa: SLF001
+    assert "document_type 'mystery-type'" in capsys.readouterr().err
+    broken = tmp_path / "broken.yaml"
+    broken.write_text("document_types: []\n", encoding="utf-8")
+    args = cli._parser().parse_args(  # noqa: SLF001
+        [
+            "sync",
+            "--manifest",
+            str(manifest),
+            "--config",
+            str(config),
+            "--dry-run",
+            "--taxonomy",
+            str(broken),
+        ]
+    )
+    assert cli._sync(args, env.fetcher) == 1  # noqa: SLF001

@@ -2,112 +2,122 @@
 SPDX-FileCopyrightText: 2026 H2Lab Development Team
 SPDX-License-Identifier: Apache-2.0
 -->
+## Enhancing V1
 
-# TODO
 
-Each step is one commit and must leave `tox` green (tests, lint, typecheck).
-Reference: [doc/architecture.md](doc/architecture.md).
-Development rules: [AGENTS.md](AGENTS.md), including the ANSSI RAG security guide (R1-R35). Everything in this repository is in English.
+Task: Generalize Silicore Knowledge into a generic technical knowledge RAG
 
-Scope: the server only. The pyGdbToolkit integration (`KnowledgeClient`, `--knowledge-url`,
-tools, prompt) belongs to the other repository, once the API is stable.
+### Context
 
-## Operating principles
+Silicore Knowledge is an existing hybrid RAG system designed
+initially for embedded systems and hardware documentation.
 
-- The service is a daemon: it owns a **workspace** (persistent data directory) separate from
-  code and configuration.
-- Original PDFs are stored **as plain files** in the workspace, not in a database. SQLite
-  (catalog + FTS5) and Qdrant are derived indexes that can be rebuilt from the files.
-- Reduced privileges: dedicated unprivileged user, write access limited to the workspace, no
-  access to GDB, OpenOCD, hardware or approvals. User-supplied paths are validated (no escape
-  from the workspace). Qdrant is never exposed outside the internal network.
-- Container-ready (Docker): configuration through file + environment variables, workspace
-  mounted as a volume, no hard-coded paths, logs on stdout.
-- Documents are data, not configuration: they go through neither `settings.yaml` nor the agent
-  tools.
+The current corpus is defined in config/corpus.yaml.
+The system already supports document synchronization,
+ingestion, indexing and retrieval.
 
-Workspace layout:
+The objective is to evolve the system into a generic technical
+knowledge engine capable of indexing heterogeneous technical
+documents and retrieving them efficiently for LLM usage.
 
-```text
-<workspace>/
-├── documents/      # original PDFs (named by hash)
-├── extracted/      # extracted text/pages (cache)
-├── quarantine/     # untrusted documents awaiting validation
-├── qdrant/         # Qdrant storage if embedded
-├── catalog.db      # SQLite: catalog + FTS5
-└── tmp/            # uploads in progress
-```
+Supported document categories should include, but not be limited to:
 
-## Foundation
+- Hardware and software architecture guides
+- Development guidelines
+- Secure coding guides
+- Programming language standards
+- Formal specification languages
+- RFCs and technical specifications
+- Datasheets
+- Reference manuals
+- Application notes
+- Security guides
+- Assembly language specifications
+- Protocol specifications
+- Hardware components and peripherals
 
-- [ ] **1. Layout and dependencies**: `api/`, `ingestion/`, `retrieval/`, `storage/` tree
-  . Dependencies: FastAPI, Uvicorn, Pydantic, PyYAML (httpx for dev). Optional
-  extras `[vector]`, `[pdf]`, `[ocr]` for heavy dependencies.
-- [ ] **2. Configuration**: `config/settings.yaml` + environment variable overrides
-  (`config.py`). Workspace, Qdrant URL, embedding model, read/admin tokens, limits.
-- [ ] **3. Workspace**: creation/validation of the workspace and its subdirectories,
-  restrictive permissions, safe path resolution (anti path traversal), refuse to run as root.
-- [ ] **4. FastAPI app, `/health`, `serve` CLI**: application factory, `main.py`,
-  `silicore-knowledge serve` (uvicorn), logs on stdout, `TestClient` tests.
+Examples of target technologies:
 
-## Phase 1: base server
+- C, C++, Python, Rust, Assembly
+- ACSL
+- STM32, FPGA, SoC
+- SPI, I2C, UART, USB
+- JTAG, SWD
+- ARM Cortex-M, Thumb-2
 
-- [ ] **5. SQLite catalog**: `storage/models.py`, `storage/catalog.py`. Tables `documents`,
-  `sections`, `chunks`, FTS5 table, versioned schema with migrations. Optional metadata
-  (never invent values).
-- [ ] **6. `/stats` and document endpoints**: `GET /documents/{id}`, `/sections`,
-  `/section/{section_id}`. Read-only, bounded response size.
-- [ ] **7. FTS5 lexical search**: metadata filters, exact register-name search test.
-- [ ] **8. Embeddings abstraction**: `Embedder` interface, local implementation (to decide:
-  sentence-transformers or Ollama embeddings), deterministic fake embedder for tests.
-- [ ] **9. Qdrant vector store**: configured collection, upsert, filtered search, in-memory
-  implementation for tests.
-- [ ] **10. Hybrid search and `POST /search`**: RRF fusion of lexical + vector results,
-  ranking with reliability per `source_type`, response schema, result limits.
-- [ ] **11. API security** (ANSSI R18, R19, R27, R29, R30, R31): separate read/admin
-  credentials, server-side filter/collection control, parameter validation, rate limits,
-  timeouts, result count/size limits, relevance threshold, correlation id, audit logging of
-  auth decisions and returned ids, no embeddings in responses or logs, uniform errors.
+### Main objective
 
-## Phase 2: ingestion (local import)
+The system must be able to retrieve relevant documents based on
+technical intent, even when the query does not use the exact
+vocabulary of the source documents.
 
-- [ ] **12. Basic ingestion**: validation (PDF type, size), SHA-256, deduplication and
-  versions, copy into `workspace/documents/`, explicitly provided metadata.
-  CLI `silicore-knowledge ingest file.pdf --manufacturer ... --device ... --document-type ...
-  --revision ... --source-url ...` (`--source-url` is provenance only, no download).
-- [ ] **13. PDF extraction**: pypdf page by page, titles and sections, tests on a generated
-  PDF.
-- [ ] **14. Technical chunking**: per section with path and page, registers/bit fields,
-  preserved tables, limited overlap, stable chunk/document ids + hash + version.
-- [ ] **15. Indexing pipeline**: extraction, chunks, embeddings, Qdrant + FTS5. Commands
-  `reindex` (rebuild from the files) and controlled deletion.
-- [ ] **16. `POST /admin/ingest`**: upload or path under an allowed directory, admin token,
-  asynchronous task with status tracking.
-- [ ] **17. Optional OCR**: enabled when extracted text is insufficient (`ocr.py`).
-- [ ] **18. Security hardening of ingestion** (ANSSI R22, R25, R25+, R26): content/metadata
-  checks (hidden text, injection patterns), quarantine area, lifecycle audit trail (id,
-  source, date, version, SHA-256, channel, validation status, chunk/vector ids), fast removal
-  of a document/batch/source with all derived data, retrievability test after removal.
-- [ ] **19. Corpus manifest and SVD support**: `config/corpus.yaml` (allowed domains, sources,
-  optional SHA-256, metadata) and `silicore-knowledge sync` (`--dry-run`, `--source`, `--limit`,
-  `--index`): downloads what is missing, verifies the hash (manifest, else lock file written on
-  first download), imports. HTTPS only, allow-listed hosts including redirects, never triggered
-  by the API. Two initial corpora: `cmsis-svd/cmsis-svd-data` (SVD files, vendor, pinned commit)
-  and `www.st.com` (explicit list of official documents). SVD import, parsing and chunking
-  (one section per peripheral, registers and bit fields).
+For example, a query about preventing firmware extraction
+should be able to retrieve documentation about JTAG, SWD,
+debug access, readout protection, lifecycle security,
+debug authentication and firmware protection.
 
-## Quality and operations
+### Architectural principles
 
-- [ ] **20. Pilot corpus and evaluation**: 10-30 documents, questions (register, bit field,
-  timing, errata, DMA), page/section verification, Recall@k, chunking/scoring tuning.
-  Started: pilot corpus (21 STM32 F4/U5 SVD files with `device_family`, 8 ST PDFs, ES0182 errata), `config/eval/questions.yaml`,
-  `silicore-knowledge evaluate` (Recall@k, MRR). Lexical tuning done (stop words, identifier ranking); the hybrid run is only partial
-  (CPU too slow). Remaining: full embeddings run on a GPU machine.
-- [ ] **21. Docker and Compose**: `Dockerfile` (non-root user, read-only filesystem outside
-  workspace/tmp), `docker-compose.yml` with Qdrant, workspace volume, `.env.example`,
-  healthchecks.
-- [ ] **22. Documentation**: installation, operations, backup (`documents/` + `catalog.db` +
-  config), index rebuild, embedding versions.
+1. Preserve existing functionality.
+2. Avoid hardware-specific assumptions in generic components.
+3. Make document types extensible.
+4. Keep metadata optional where not applicable.
+5. Separate source configuration, taxonomy, concepts and retrieval.
+6. Prefer declarative configuration over hardcoded logic.
+7. Make ingestion steps independently testable and replayable.
+8. Preserve source references, sections and page numbers.
+9. Do not introduce unnecessary infrastructure.
+10. Measure retrieval quality through automated benchmarks.
+
+### Target workstreams
+
+1. Generic metadata schema
+2. Generic document taxonomy
+3. Concept registry with aliases and acronyms
+4. Semantic document enrichment
+5. Adaptive extraction and chunking
+6. Query understanding
+7. Controlled query expansion
+8. Hybrid retrieval
+9. Reranking
+10. Context building
+11. Retrieval benchmark and regression testing
+
+### Instructions
+
+Do not implement the entire roadmap at once.
+
+First inspect the repository and report:
+
+- Current architecture
+- Existing ingestion pipeline
+- Existing document and chunk models
+- Existing metadata
+- Existing lexical and vector retrieval
+- Existing API
+- Current tests
+- Technical debt and limitations
+- Breaking changes that might be required
+
+Then propose:
+
+- A target architecture
+- A migration strategy
+- An incremental implementation plan
+- The smallest useful first milestone
+
+Wait for approval before implementing architectural changes.
+
+For each implementation task:
+
+- Keep the scope limited
+- Preserve backward compatibility where possible
+- Add tests
+- Update documentation
+- Avoid unnecessary dependencies
+- Report changed files
+- Report test results
+- Identify remaining limitations
 
 ## Later (V2)
 

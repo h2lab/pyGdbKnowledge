@@ -4,7 +4,7 @@
 # Pilot evaluation questions for `silicore-knowledge evaluate`.
 # Each question lists the evidence a correct answer needs; `document` is matched against the
 # document id, title and device, `contains` against the chunk text (case-insensitive).
-# Categories: register, bitfield, address, dma, timing, hardware, cross.
+# Categories: register, bitfield, address, dma, timing, hardware, cross, intent.
 # Gap: only one errata sheet (ES0182, STM32F407) in the pilot corpus.
 
 questions:
@@ -142,3 +142,27 @@ questions:
     category: cross
     query: how to enable the USART1 peripheral clock on STM32U5
     expect: [{peripheral: RCC, document: u5}, {document: u595xx-datasheet}]
+
+  # --- technical intent (exercises the concept registry and query expansion) ---
+  # These queries avoid the vocabulary of the documents on purpose: without expansion they
+  # rely on chance; with config/concepts.yaml they should reach the right passages.
+  - id: intent-firmware-extraction
+    category: intent
+    query: prevent firmware extraction from the microcontroller
+    expect: [{contains: ["RDP"]}, {contains: ["readout protection"]}, {contains: ["TrustZone"]}]
+  - id: intent-debug-lock
+    category: intent
+    query: lock the debug interface before shipping the product
+    expect: [{contains: ["JTAG"]}, {contains: ["SWD"]}, {contains: ["debug authentication"]}]
+  - id: intent-formal-contracts
+    category: intent
+    query: formally specify the behavior of C functions
+    expect: [{document: acsl}]
+  - id: intent-field-update
+    category: intent
+    query: update the firmware of a deployed device in the field
+    expect: [{contains: ["bootloader"]}, {contains: ["DFU"]}, {contains: ["flash programming"]}]
+  - id: intent-battery-life
+    category: intent
+    query: extend the battery life of the application
+    expect: [{contains: ["stop mode"]}, {contains: ["standby"]}, {contains: ["low-power"]}]

@@ -43,6 +43,7 @@ class SearchResult(BaseModel):
     device: str | None
     peripheral: str | None
     revision: str | None
+    keywords: tuple[str, ...]
     indexed_at: datetime | None
     url: str | None
     text: str
@@ -97,6 +98,7 @@ def search(
                 device=document.device,
                 peripheral=chunk.peripheral,
                 revision=document.revision,
+                keywords=document.keywords,
                 indexed_at=document.indexed_at,
                 url=document.source_url,
                 text=chunk.text[: limits.max_text_chars],

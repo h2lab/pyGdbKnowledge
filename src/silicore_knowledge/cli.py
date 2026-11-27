@@ -12,16 +12,18 @@ import uvicorn
 
 from .config import ConfigError, Settings, load_settings
 from .corpus.fetch import Fetcher, HttpFetcher
-from .corpus.manifest import CorpusError, load_manifest
+from .corpus.manifest import CorpusError, Manifest, load_manifest
 from .corpus.sync import LockFile, plan_sync, run_sync
+from .corpus.taxonomy import TaxonomyError, load_taxonomy
 from .evaluation import EvaluationError, evaluate, load_questions
 from .ingestion.importer import DocumentMetadata, IngestError, import_document
 from .ingestion.pipeline import BatchReport, Indexer, IndexingError
 from .main import configure_logging, create_app
+from .retrieval.concepts import ConceptError
 from .retrieval.embeddings import EmbeddingError
 from .retrieval.hybrid import HybridSearcher
 from .retrieval.vector_store import VectorStoreError
-from .services import build_vector_components
+from .services import build_vector_components, load_concept_registry
 from .storage.catalog import Catalog, CatalogError
 from .storage.models import SourceType
 from .workspace import Workspace, WorkspaceError
@@ -55,6 +57,13 @@ def _parser() -> argparse.ArgumentParser:
     ingest.add_argument("--document-type", help="e.g. datasheet, reference_manual")
     ingest.add_argument("--revision")
     ingest.add_argument("--source-url", help="provenance only; the URL is never fetched")
+    ingest.add_argument(
+        "--keyword",
+        action="append",
+        dest="keywords",
+        metavar="KEYWORD",
+        help="retrieval keyword indexed with the document (repeatable)",
+    )
     ingest.add_argument("--index", action="store_true", help="index the documents after import")
     for name, help_text in (
         ("index", "index documents that have no index yet (all active ones by default)"),
@@ -86,6 +95,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     sync.add_argument("--manifest", type=Path, default=Path("config/corpus.yaml"))
     sync.add_argument("--lock", type=Path, help="lock file (default: corpus.lock.json beside it)")
+    sync.add_argument(
+        "--taxonomy",
+        type=Path,
+        help="document type taxonomy (default: taxonomy.yaml beside the manifest, when present)",
+    )
     sync.add_argument("--source", help="only synchronize this source of the manifest")
     sync.add_argument("--dry-run", action="store_true", help="list what would be downloaded")
     sync.add_argument("--limit", type=int, help="stop after this many downloads")
@@ -210,6 +224,7 @@ def _ingest(args: argparse.Namespace) -> int:
         document_type=args.document_type,
         revision=args.revision,
         source_url=args.source_url,
+        keywords=tuple(args.keywords or ()),
     )
     failures = 0
     imported: list[str] = []
@@ -233,6 +248,30 @@ def _ingest(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def _check_taxonomy(manifest: Manifest, manifest_path: Path, taxonomy_path: Path | None) -> int:
+    """Warn about manifest document types absent from the taxonomy; never reject them.
+
+    Returns
+    -------
+    int
+        0, or 1 when an explicitly given taxonomy file is unreadable or invalid.
+    """
+    path = taxonomy_path or manifest_path.with_name("taxonomy.yaml")
+    if taxonomy_path is None and not path.exists():
+        return 0
+    try:
+        taxonomy = load_taxonomy(path)
+    except TaxonomyError as exc:
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
+        return 1
+    for name in taxonomy.unknown_document_types(manifest):
+        print(
+            f"silicore-knowledge: warning: document_type {name!r} is not in the taxonomy {path}",
+            file=sys.stderr,
+        )
+    return 0
+
+
 def _sync(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     opened = _open(args.config)
     if opened is None:
@@ -241,6 +280,8 @@ def _sync(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     max_bytes = settings.limits.max_upload_bytes
     try:
         manifest = load_manifest(args.manifest)
+        if _check_taxonomy(manifest, args.manifest, args.taxonomy):
+            return 1
         lock = LockFile(args.lock or args.manifest.with_name("corpus.lock.json"))
         client = fetcher or HttpFetcher(
             manifest.allowed_domains, manifest.timeout_s, manifest.request_delay_s
@@ -284,11 +325,12 @@ def _evaluate(args: argparse.Namespace) -> int:
     try:
         questions = load_questions(args.questions)
         components = build_vector_components(settings)
-    except (EvaluationError, EmbeddingError, VectorStoreError) as exc:
+        concepts = load_concept_registry(settings)
+    except (EvaluationError, EmbeddingError, VectorStoreError, ConceptError) as exc:
         print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return 1
     embedder, store = components if components else (None, None)
-    report = evaluate(HybridSearcher(catalog, embedder, store), questions)
+    report = evaluate(HybridSearcher(catalog, embedder, store, concepts=concepts), questions)
     for result in report.results:
         if args.verbose or result.rank is None:
             rank = result.rank or "miss"
@@ -308,7 +350,14 @@ def _serve(config: Path | None) -> int:
         settings = load_settings(config)
         workspace = Workspace(settings.workspace)
         app = create_app(settings, workspace)
-    except (ConfigError, WorkspaceError, CatalogError, EmbeddingError, VectorStoreError) as exc:
+    except (
+        ConfigError,
+        WorkspaceError,
+        CatalogError,
+        EmbeddingError,
+        VectorStoreError,
+        ConceptError,
+    ) as exc:
         print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return 1
     configure_logging(settings.log_level)

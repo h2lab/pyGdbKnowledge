@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from silicore_knowledge.retrieval.lexical_search import (
     MAX_TERMS,
+    build_expansion_query,
     build_identifier_query,
     build_match_query,
     lexical_search,
@@ -186,3 +187,13 @@ def test_identifier_query_keeps_underscored_names_only() -> None:
         '"flash_acr" OR "rcc_ahb1enr"'
     )
     assert build_identifier_query("wait states") is None
+
+
+def test_build_expansion_query_quotes_terms_as_phrases() -> None:
+    """Expansion terms become quoted phrases; duplicates and empty terms are dropped."""
+    query = build_expansion_query(["readout protection", "RDP", "rdp", "!!!"])
+    assert query == '"readout protection" OR "rdp"'
+    assert build_expansion_query([]) is None
+    assert build_expansion_query(["!!", "  "]) is None
+    capped = build_expansion_query([f"term{i}" for i in range(MAX_TERMS + 5)])
+    assert capped is not None and capped.count(" OR ") == MAX_TERMS - 1

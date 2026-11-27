@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from silicore_knowledge.retrieval.concepts import Concept, ConceptRegistry
 from silicore_knowledge.retrieval.embeddings import EmbeddingError
 from silicore_knowledge.retrieval.hybrid import HybridSearcher
 from silicore_knowledge.retrieval.vector_store import InMemoryVectorStore, VectorRecord
@@ -171,3 +172,28 @@ def test_filters_apply_to_vector_side(catalog: Catalog, store: InMemoryVectorSto
     """Filters reach the vector store as well."""
     searcher = HybridSearcher(catalog, StubEmbedder((1.0, 0.0)), store)
     assert searcher.search("nothing", SearchFilters(manufacturer="NXP"), 5) == []
+
+
+def test_concept_expansion_reaches_another_vocabulary(catalog: Catalog) -> None:
+    """A query naming no chunk term still finds the chunk through concept expansion."""
+    registry = ConceptRegistry(
+        [Concept(id="clocks", terms=("PLL", "clock tree", "clock configuration"))]
+    )
+    bare = HybridSearcher(catalog)
+    assert bare.search("PLL settings", SearchFilters(), 5) == []
+    searcher = HybridSearcher(catalog, concepts=registry)
+    hits = searcher.search("PLL settings", SearchFilters(), 5)
+    assert [h.chunk.chunk_id for h in hits] == ["official:1"]
+    # Expansion respects the metadata filters like every other ranking.
+    assert searcher.search("PLL settings", SearchFilters(manufacturer="NXP"), 5) == []
+
+
+def test_unmatched_concepts_do_not_change_the_ranking(catalog: Catalog) -> None:
+    """Without a matching concept, results equal the lexical-only ranking."""
+    registry = ConceptRegistry([Concept(id="clocks", terms=("PLL",))])
+    with_registry = HybridSearcher(catalog, concepts=registry)
+    without = HybridSearcher(catalog)
+    query = "usart_isr"
+    assert with_registry.search(query, SearchFilters(), 5) == without.search(
+        query, SearchFilters(), 5
+    )

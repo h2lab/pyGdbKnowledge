@@ -20,7 +20,7 @@ from ..ingestion.pipeline import Indexer, IndexingError
 from ..ingestion.tasks import TaskInfo, TaskRegistry
 from ..security import audit_logger
 from ..storage.catalog import Catalog, CatalogError
-from ..storage.models import ID_PATTERN, SourceType
+from ..storage.models import ID_PATTERN, MAX_KEYWORDS, Keyword, SourceType
 from ..workspace import Area, Workspace
 from .deps import get_catalog, get_settings
 
@@ -45,10 +45,13 @@ class ImportMetadata(BaseModel):
     document_type: _Text = None
     revision: _Text = None
     source_url: Annotated[str | None, Field(default=None, max_length=2000)] = None
+    keywords: tuple[Keyword, ...] = Field(default=(), max_length=MAX_KEYWORDS)
 
     def to_metadata(self) -> DocumentMetadata:
         """Convert to the importer's metadata."""
-        return DocumentMetadata(**self.model_dump())
+        data = self.model_dump()
+        data["keywords"] = tuple(data["keywords"])
+        return DocumentMetadata(**data)
 
 
 class PathImport(ImportMetadata):

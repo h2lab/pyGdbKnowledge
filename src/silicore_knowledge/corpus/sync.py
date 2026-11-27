@@ -173,6 +173,7 @@ def _expand_urls(source: UrlSource) -> list[PlannedDownload]:
                     document_type=entry.document_type,
                     revision=entry.revision,
                     source_url=entry.url,
+                    keywords=entry.keywords,
                 ),
             )
         )

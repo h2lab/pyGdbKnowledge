@@ -4,6 +4,10 @@
 # Corpus manifest for `silicore-knowledge sync` (operator command; the HTTP API never downloads).
 # Hashes of files without an explicit `sha256` are recorded in corpus.lock.json on first
 # download (trust on first use) and verified afterwards. Commit the lock file.
+#
+# Only PDF and CMSIS-SVD files can be ingested today: list direct PDF URLs, not HTML pages.
+# Document types should come from config/taxonomy.yaml; unknown types are reported by `sync`.
+# `keywords` are optional retrieval terms indexed with the document's passages.
 
 # Only these hosts may be contacted, redirects included. HTTPS only.
 allowed_domains:
@@ -12,10 +16,6 @@ allowed_domains:
   - www.st.com
   - www.arm.com
   - frama-c.com
-  - api.github.com
-  - raw.githubusercontent.com
-  - www.st.com
-  - www.arm.com
 request_delay_s: 1.0
 timeout_s: 60
 
@@ -45,123 +45,59 @@ sources:
         title: STM32U595xx datasheet
         device_family: STM32U5
         document_type: datasheet
-        keywords: ["datasheet", "stm32u5", "microcontroller", "st", "embedded"]
+        keywords: [microcontroller, cortex-m33, low power, trustzone]
       - url: https://www.st.com/resource/en/datasheet/stm32u5a5zj.pdf
         title: STM32U5A5xx/U5A9xx datasheet
         device_family: STM32U5
         device: STM32U5A5
         document_type: datasheet
-        keywords: ["datasheet", "stm32u5", "microcontroller", "st", "embedded"]
+        keywords: [microcontroller, cortex-m33, graphics, low power]
       - url: https://www.st.com/resource/en/application_note/an5373-getting-started-with-stm32u5-mcu-hardware-development-stmicroelectronics.pdf
         title: AN5373 Getting started with STM32U5 MCU hardware development
         device_family: STM32U5
-        document_type: technical-guide
-        keywords: ["getting started", "stm32u5", "hardware development", "mcu", "embedded"]
+        document_type: application-note
+        keywords: [getting started, hardware development, power supply, clock, layout]
       - url: https://www.st.com/resource/en/datasheet/stm32n657x0.pdf
         title: STM32N657x0 datasheet
         device_family: STM32N6
         device: STM32N657
         document_type: datasheet
-        keywords: ["datasheet", "stm32n6", "microcontroller", "st", "embedded"]
+        keywords: [microcontroller, cortex-m55, neural processing]
       - url: https://www.st.com/resource/en/datasheet/stm32f407vg.pdf
         title: STM32F405xx/407xx datasheet
         device_family: STM32F4
         device: STM32F407
         document_type: datasheet
-        keywords: ["datasheet", "stm32f4", "microcontroller", "st", "embedded"]
+        keywords: [microcontroller, cortex-m4]
       - url: https://www.st.com/resource/en/datasheet/stm32f429zi.pdf
         title: STM32F427xx/429xx datasheet
         device_family: STM32F4
         device: STM32F429
         document_type: datasheet
-        keywords: ["datasheet", "stm32f4", "microcontroller", "st", "embedded"]
+        keywords: [microcontroller, cortex-m4, lcd-tft]
       - url: https://www.st.com/resource/en/application_note/an4488-getting-started-with-stm32f4xxxx-mcu-hardware-development-stmicroelectronics.pdf
         title: AN4488 Getting started with STM32F4xxxx MCU hardware development
         device_family: STM32F4
-        document_type: technical-guide
-        keywords: ["getting started", "stm32f4", "hardware development", "mcu", "embedded"]
+        document_type: application-note
+        keywords: [getting started, hardware development, power supply, clock, layout]
       - url: https://www.st.com/resource/en/errata_sheet/es0182-stm32f405407xx-and-stm32f415417xx-device-errata-stmicroelectronics.pdf
         title: ES0182 STM32F405/407xx and STM32F415/417xx device errata
         device_family: STM32F4
         device: STM32F407
         document_type: errata
-        keywords: ["errata", "stm32f4", "device", "st", "embedded"]
+        keywords: [errata, silicon limitation, workaround]
+
+  # Formal specification languages and verification tooling.
+  - name: frama-c
+    kind: urls
+    source_type: official
+    documents:
       - url: https://frama-c.com/download/frama-c-acsl-implementation.pdf
-        title: Frama-C ACSL Implementation
-        device_family: Frama-C
+        title: ACSL implementation (Frama-C)
         document_type: specification
-        keywords: ["acsl", "frama-c", "formal-methods", "verification", "language-specification"]
+        keywords: [acsl, frama-c, formal methods, verification, function contract, c]
 
-  # Additional technical guides and documentation
-  - name: technical-guides
-    kind: urls
-    source_type: community
-    manufacturer: "Various"
-    documents:
-      - url: https://arm.com/resources/developer-tools/cortex-m/technical-guides
-        title: ARM Cortex-M Technical Guides
-        device_family: "ARM"
-        document_type: technical-guide
-        keywords: ["technical guide", "arm", "cortex-m", "embedded", "microcontroller"]
-      - url: https://docs.zephyrproject.org/latest/index.html
-        title: Zephyr OS Documentation
-        device_family: "Generic"
-        document_type: technical-guide
-        keywords: ["technical guide", "zephyr", "operating system", "embedded", "rtos"]
-
-  # Requirement documents and specifications
-  - name: requirement-docs
-    kind: urls
-    source_type: official
-    manufacturer: "Various"
-    documents:
-      - url: https://www.iso.org/isoiec-12207-2008
-        title: ISO/IEC 12207 Software Life Cycle Processes
-        device_family: "Software"
-        document_type: requirement-document
-        keywords: ["requirement", "software", "lifecycle", "process", "specification"]
-      - url: https://www.nist.gov/sites/default/files/documents/itl/1800/1800-1.pdf
-        title: NIST Cybersecurity Framework
-        device_family: "Security"
-        document_type: requirement-document
-        keywords: ["requirement", "security", "framework", "nist", "compliance"]
-
-  # Hardware specification documents
-  - name: hardware-specs
-    kind: urls
-    source_type: official
-    manufacturer: "Various"
-    documents:
-      - url: https://www.usb.org/specifications
-        title: USB Specifications
-        device_family: "USB"
-        document_type: specification
-        keywords: ["specification", "usb", "protocol", "interface", "standards"]
-      - url: https://www.ieee.org/standards/index.html
-        title: IEEE Standards
-        device_family: "Standards"
-        document_type: specification
-        keywords: ["specification", "ieee", "standards", "protocol", "interface"]
-
-  # Best practice guides for different programming languages and development methodologies
-  - name: best-practice-guides
-    kind: urls
-    source_type: community
-    manufacturer: "Various"
-    documents:
-      - url: https://google.github.io/styleguide/cppguide.html
-        title: Google C++ Style Guide
-        device_family: "C++"
-        document_type: best-practice
-        keywords: ["best practice", "cpp", "c++", "style guide", "coding"]
-      - url: https://doc.rust-lang.org/book/
-        title: Rust Programming Language Book
-        device_family: "Rust"
-        document_type: best-practice
-        keywords: ["best practice", "rust", "programming", "book", "development"]
-      - url: https://docs.python.org/3/tutorial/index.html
-        title: Python Tutorial
-        device_family: "Python"
-        document_type: best-practice
-        keywords: ["best practice", "python", "tutorial", "development", "programming"]
-
+  # To widen the corpus (secure coding guides, language standards, RFCs, protocol
+  # specifications, ...), add `urls` sources with direct PDF links and list every new host in
+  # `allowed_domains`. HTML-only resources (Zephyr docs, Rust book, IEEE/USB portal pages, ...)
+  # cannot be ingested yet; see TODO.md (V2 web indexing / HTML extraction).

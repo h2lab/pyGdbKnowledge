@@ -8,8 +8,9 @@ from collections.abc import Mapping
 
 from ..storage.catalog import Catalog
 from ..storage.models import SearchFilters, SearchHit, SourceType
+from .concepts import ConceptRegistry
 from .embeddings import Embedder, EmbeddingError
-from .lexical_search import identifier_search, lexical_search
+from .lexical_search import expansion_search, identifier_search, lexical_search
 from .vector_store import VectorStore, VectorStoreError
 
 logger = logging.getLogger("silicore_knowledge")
@@ -43,6 +44,8 @@ class HybridSearcher:
         Vector index; None disables semantic search.
     source_weights : Mapping[SourceType, float] | None
         Reliability multiplier per source type.
+    concepts : ConceptRegistry | None
+        Declarative concept registry; None disables query expansion.
     """
 
     def __init__(
@@ -51,11 +54,13 @@ class HybridSearcher:
         embedder: Embedder | None = None,
         vector_store: VectorStore | None = None,
         source_weights: Mapping[SourceType, float] | None = None,
+        concepts: ConceptRegistry | None = None,
     ) -> None:
         self._catalog = catalog
         self._embedder = embedder
         self._vector_store = vector_store
         self._weights = dict(source_weights or DEFAULT_SOURCE_WEIGHTS)
+        self._concepts = concepts
 
     @property
     def semantic(self) -> bool:
@@ -92,6 +97,9 @@ class HybridSearcher:
         identifiers = identifier_search(self._catalog, query, filters, candidates)
         if identifiers:
             rankings.append(identifiers)
+        expansion = self._expansion_ranking(query, filters, candidates)
+        if expansion:
+            rankings.append(expansion)
         vector_ranking = self._vector_ranking(query, filters, candidates)
         if vector_ranking is not None:
             rankings.append(vector_ranking)
@@ -119,6 +127,23 @@ class HybridSearcher:
             if len(results) == limit:
                 break
         return results
+
+    def _expansion_ranking(
+        self, query: str, filters: SearchFilters, candidates: int
+    ) -> list[SearchHit]:
+        """Rank chunks by the controlled expansion terms of the query's concepts.
+
+        The expansion comes from the declarative registry only; it adds one ranking to the
+        fusion so a document using another vocabulary can surface without displacing exact
+        matches.
+        """
+        if self._concepts is None:
+            return []
+        terms = self._concepts.expansion_terms(query)
+        if not terms:
+            return []
+        logger.debug("query expanded with %d concept terms", len(terms))
+        return expansion_search(self._catalog, terms, filters, candidates)
 
     def _vector_ranking(
         self, query: str, filters: SearchFilters, candidates: int

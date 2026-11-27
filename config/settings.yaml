@@ -37,6 +37,10 @@ ocr:
   language: eng             # tesseract language(s), e.g. eng+fra
   timeout_s: 1800
   min_chars_per_page: 40    # OCR only when the average text per page is below this
+
+retrieval:
+  concepts_path: config/concepts.yaml   # declarative query expansion; null disables it
+
 limits:
   max_results: 20
   default_results: 8

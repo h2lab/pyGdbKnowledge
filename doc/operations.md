@@ -53,7 +53,7 @@ The service never fetches anything by itself. Documents enter through one of:
 
 1. `silicore-knowledge ingest FILE... --source-type official|vendor|community [--index]`
    for local PDF or SVD files (metadata options: `--device-family`, `--device`,
-   `--document-type`, ...).
+   `--document-type`, `--keyword` (repeatable), ...).
 2. `silicore-knowledge sync [--dry-run] [--index]`: downloads the documents listed in
    [config/corpus.yaml](../config/corpus.yaml) (allow-listed HTTPS hosts, size cap, throttling)
    and records SHA-256 digests in `config/corpus.lock.json` (trust on first use; a changed file
@@ -64,8 +64,21 @@ Documents flagged by content screening go to quarantine: review, then
 `silicore-knowledge release DOCUMENT_ID`. Every lifecycle event is kept in the audit trail
 (`silicore-knowledge audit [DOCUMENT_ID]`).
 
-To add a corpus entry, append the URL (taken from the document page on www.st.com) to the
-manifest with its title, `device_family`, `device` and `document_type`, then run `sync`.
+To add a corpus entry, append the URL (a direct PDF link; HTML pages cannot be ingested) to the
+manifest with its title, `document_type` and, when applicable, `device_family`, `device` and
+`keywords`, then run `sync`. New hosts must be added to `allowed_domains`. Document types
+should come from [config/taxonomy.yaml](../config/taxonomy.yaml): `sync` warns about unknown
+types (add the type to the taxonomy first). `keywords` are indexed with the document's
+passages and help queries that use another vocabulary reach it.
+
+## Query expansion concepts
+
+[config/concepts.yaml](../config/concepts.yaml) (configured through `retrieval.concepts_path`)
+declares concepts with their aliases, acronyms and related concepts. When a query names a
+concept, the sibling and related terms form one extra lexical ranking, so an intent such as
+"prevent firmware extraction" can reach passages about readout protection, RDP, JTAG or SWD.
+Review this file like code: it directly shapes retrieval. After editing it, run the evaluation
+(the `intent` category measures expansion) — no reindexing is needed.
 
 ## Index maintenance
 

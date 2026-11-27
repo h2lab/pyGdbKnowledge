@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from ..storage.models import SHA256_PATTERN, SourceType
+from ..storage.models import MAX_KEYWORDS, SHA256_PATTERN, Keyword, SourceType
 
 GITHUB_API_HOST = "api.github.com"
 GITHUB_RAW_HOST = "raw.githubusercontent.com"
@@ -25,7 +25,11 @@ class _Model(BaseModel):
 
 
 class DocumentEntry(_Model):
-    """One explicitly listed document; ``sha256`` is optional (trust on first use otherwise)."""
+    """One explicitly listed document; ``sha256`` is optional (trust on first use otherwise).
+
+    ``keywords`` are optional retrieval terms attached to the document; they are indexed with
+    its passages so that a query can reach a document whose body uses another vocabulary.
+    """
 
     url: str = Field(pattern=r"^https://\S+$")
     sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
@@ -35,27 +39,7 @@ class DocumentEntry(_Model):
     device: str | None = None
     document_type: str | None = None
     revision: str | None = None
-    keywords: list[str] = Field(default_factory=list)
-
-    def __getitem__(self, key):
-        # Permettre l'accès par clé pour compatibilité avec les tests existants
-        if key == "document_type":
-            return self.document_type
-        elif key == "keywords":
-            return self.keywords
-        elif key == "url":
-            return self.url
-        elif key == "title":
-            return self.title
-        elif key == "manufacturer":
-            return self.manufacturer
-        elif key == "device_family":
-            return self.device_family
-        elif key == "device":
-            return self.device
-        elif key == "revision":
-            return self.revision
-        raise KeyError(key)
+    keywords: tuple[Keyword, ...] = Field(default=(), max_length=MAX_KEYWORDS)
 
 
 class UrlSource(_Model):
@@ -66,11 +50,6 @@ class UrlSource(_Model):
     source_type: SourceType
     manufacturer: str | None = None
     documents: tuple[DocumentEntry, ...] = ()
-
-    def __getitem__(self, key):
-        if key == "documents":
-            return self.documents
-        raise KeyError(key)
 
 
 class GithubSvdSource(_Model):

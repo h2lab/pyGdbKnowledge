@@ -35,6 +35,7 @@ class DocumentMetadata:
     """Provenance and classification supplied by the operator; never guessed.
 
     ``source_url`` records where the file came from. It is provenance only and is never fetched.
+    ``keywords`` are optional retrieval terms indexed with the document's passages.
     """
 
     source_type: SourceType
@@ -45,6 +46,7 @@ class DocumentMetadata:
     document_type: str | None = None
     revision: str | None = None
     source_url: str | None = None
+    keywords: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +142,7 @@ def import_document(
             metadata.device,
             metadata.document_type,
             metadata.revision,
+            *metadata.keywords,
         )
     )
     if suspicious:
@@ -190,6 +193,7 @@ def import_document(
                 document_type=metadata.document_type,
                 revision=metadata.revision,
                 source_url=metadata.source_url,
+                keywords=metadata.keywords,
             )
         except ValidationError as exc:
             raise IngestError(f"invalid metadata: {exc.errors()[0]['loc']}") from exc

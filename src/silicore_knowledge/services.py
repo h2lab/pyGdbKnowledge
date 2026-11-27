@@ -5,13 +5,35 @@
 
 from .config import Settings
 from .ingestion.pipeline import Indexer
+from .retrieval.concepts import ConceptError, ConceptRegistry, load_concepts
 from .retrieval.embeddings import Embedder, EmbeddingError, create_embedder
 from .retrieval.hybrid import HybridSearcher
 from .retrieval.vector_store import QdrantVectorStore, VectorStore, VectorStoreError
 from .storage.catalog import Catalog
 from .workspace import Workspace
 
-__all__ = ["EmbeddingError", "VectorStoreError", "build_runtime", "build_vector_components"]
+__all__ = [
+    "ConceptError",
+    "EmbeddingError",
+    "VectorStoreError",
+    "build_runtime",
+    "build_vector_components",
+    "load_concept_registry",
+]
+
+
+def load_concept_registry(settings: Settings) -> ConceptRegistry | None:
+    """Load the concept registry, or None when query expansion is not configured.
+
+    Raises
+    ------
+    ConceptError
+        If the configured concept file is unreadable or invalid.
+    """
+    path = settings.retrieval.concepts_path
+    if path is None:
+        return None
+    return load_concepts(path)
 
 
 def build_vector_components(settings: Settings) -> tuple[Embedder, VectorStore] | None:
@@ -47,6 +69,7 @@ def build_runtime(
     components = build_vector_components(settings)
     embedder, store = components if components else (None, None)
     return (
-        searcher or HybridSearcher(catalog, embedder, store),
+        searcher
+        or HybridSearcher(catalog, embedder, store, concepts=load_concept_registry(settings)),
         indexer or Indexer(settings, workspace, catalog, embedder, store),
     )

@@ -85,10 +85,17 @@ local file -> validation + SHA-256 + duplicate/version detection
 - Chunking follows document structure (sections, registers and bit fields, tables), keeps
   section path, page and peripheral context, limits overlap, and uses stable chunk ids.
 - Unknown metadata stays null; values are never invented.
+- Operator-supplied `keywords` (manifest entries, CLI `--keyword`, admin API) are stored on the
+  document and indexed with its passages, so a query can reach a document whose body uses
+  another vocabulary. They are screened like every other metadata value.
+- `config/taxonomy.yaml` declares the known `document_type` values (datasheet,
+  reference-manual, specification, rfc, secure-coding-guide, ...). The taxonomy is declarative
+  and advisory: `sync` warns about unknown types without rejecting them, so the vocabulary can
+  grow before the taxonomy does.
 
 Minimal metadata: `document_id`, `title`, `manufacturer`, `device_family`, `device`,
 `document_type`, `revision`, `peripheral`, `section`, `page`, `source_type`, `source_url`,
-`indexed_at`, `content_hash`.
+`keywords`, `indexed_at`, `content_hash`.
 
 ## Hybrid search
 
@@ -96,6 +103,15 @@ Vector search (natural-language questions), FTS5 (exact names such as `USART_ISR
 addresses), and metadata filters (manufacturer, family, device, peripheral, document type,
 revision) are fused (reciprocal rank fusion) and ranked, with a bonus by source reliability.
 No LLM reranker until retrieval quality has been measured.
+
+Controlled query expansion closes the vocabulary gap between a technical intent and the
+documents: `config/concepts.yaml` (set through `retrieval.concepts_path`) declares concepts
+with their aliases, acronyms and related concepts (for example firmware extraction → readout
+protection, RDP, JTAG, SWD, debug authentication). When a query names a concept, the other
+terms form one extra lexical ranking in the fusion. Expansion is declarative, reviewed with
+the configuration, bounded in matched concepts and added terms, and never derived from the
+query or a model (ANSSI R27). The `intent` category of `config/eval/questions.yaml` measures
+its effect.
 
 Source reliability: A official documentation, B official vendor support/forum, C community
 (GitHub, third-party forums), D agent hypothesis (never produced by this server).
@@ -115,7 +131,8 @@ Source reliability: A official documentation, B official vendor support/forum, C
 
 Search request: `query`, optional `filters` (`manufacturer`, `device`, `peripheral`,
 `document_type`), `limit`. Search result: `chunk_id`, `document_id`, `title`, `section`,
-`page`, `score`, `source_type`, `text`, `url`, plus revision and indexing date when known.
+`page`, `score`, `source_type`, `keywords`, `text`, `url`, plus revision and indexing date
+when known.
 
 ## Security
 

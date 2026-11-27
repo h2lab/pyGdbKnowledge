@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+# Declarative document taxonomy, checked (as warnings) by `silicore-knowledge sync`.
+# Add new types here before using them in config/corpus.yaml; names are lowercase
+# with hyphens. The taxonomy is advisory: unknown types never block a sync.
+
+document_types:
+  - name: datasheet
+    description: Electrical, timing and pinout characteristics of a hardware component.
+  - name: reference-manual
+    description: Complete functional description of a device, its peripherals and registers.
+  - name: application-note
+    description: Vendor guidance on using a device or peripheral in a design.
+  - name: errata
+    description: Known silicon or documentation defects and their workarounds.
+  - name: user-manual
+    description: Usage documentation of a board, tool or software product.
+  - name: programming-manual
+    description: Instruction set or core programming documentation.
+  - name: svd
+    description: CMSIS-SVD hardware description (peripherals, registers, bit fields).
+  - name: technical-guide
+    description: Hardware or software architecture and development guide.
+  - name: requirement-document
+    description: Formal system, software or hardware requirements.
+  - name: specification
+    description: Formal technical specification or language definition.
+  - name: standard
+    description: Published standard (ISO, IEEE, ECMA, ...).
+  - name: rfc
+    description: IETF Request for Comments.
+  - name: protocol-specification
+    description: Communication protocol or bus specification (SPI, I2C, USB, ...).
+  - name: secure-coding-guide
+    description: Secure development rules and recommendations.
+  - name: best-practice
+    description: Development guidelines and recommended practices.
+  - name: security-guide
+    description: Security hardening, lifecycle or certification guidance.

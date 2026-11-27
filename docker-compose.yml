@@ -23,6 +23,8 @@ services:
       SILICORE_KNOWLEDGE__QDRANT__URL: http://qdrant:6333
       SILICORE_KNOWLEDGE__EMBEDDINGS__ENABLED: ${KNOWLEDGE_EMBEDDINGS:-false}
       SILICORE_KNOWLEDGE__EMBEDDINGS__MODEL: ${KNOWLEDGE_EMBEDDING_MODEL:-BAAI/bge-m3}
+      # The config directory is mounted on /corpus (see volumes below).
+      SILICORE_KNOWLEDGE__RETRIEVAL__CONCEPTS_PATH: /corpus/concepts.yaml
     ports:
       - "127.0.0.1:${KNOWLEDGE_PORT:-8080}:8080"
     volumes:

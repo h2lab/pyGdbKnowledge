@@ -34,6 +34,7 @@ def client(tmp_path: Path) -> TestClient:
             manufacturer="ST",
             revision="Rev 3",
             source_url="https://example.org/ds.pdf",
+            keywords=("serial", "uart"),
         )
     )
     section = Section(document_id="ds-1", section_id="s", title="S", path="P > S", ordinal=0)
@@ -64,6 +65,7 @@ def test_search_returns_documented_fields(client: TestClient) -> None:
     assert result["page"] == 4
     assert result["source_type"] == "official"
     assert result["revision"] == "Rev 3"
+    assert result["keywords"] == ["serial", "uart"]
     assert result["url"] == "https://example.org/ds.pdf"
     assert 0.0 < result["score"] <= 1.0
     assert len(result["text"]) == 100 and result["truncated"] is True

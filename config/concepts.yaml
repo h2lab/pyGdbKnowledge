@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 H2Lab Development Team
+# SPDX-License-Identifier: Apache-2.0
+
+# Concept registry for controlled query expansion (see doc/architecture.md).
+# A concept lists the terms a technical intent may hide behind; when a query uses one of
+# them, the others (and the terms of `related` concepts, one hop) are added as an extra
+# lexical ranking. Expansion is bounded and comes from this reviewed file only.
+
+concepts:
+  - id: debug-access
+    label: Debug access
+    terms: [JTAG, SWD, debug port, debug access, debug authentication, DAP, debug probe]
+
+  - id: firmware-extraction
+    label: Firmware extraction protection
+    terms:
+      - firmware extraction
+      - readout protection
+      - RDP
+      - code readout
+      - flash readout
+      - memory dump
+    related: [debug-access, lifecycle-security]
+
+  - id: lifecycle-security
+    label: Device lifecycle security
+    terms: [lifecycle, secure boot, root of trust, TrustZone, secure firmware, tamper]
+
+  - id: memory-protection
+    label: Memory protection
+    terms: [MPU, memory protection unit, write protection, access control, privileged access]
+
+  - id: clock-configuration
+    label: Clock configuration
+    terms: [RCC, clock tree, PLL, prescaler, clock source, oscillator, HSE, HSI]
+
+  - id: low-power
+    label: Low-power operation
+    terms: [low power, sleep mode, stop mode, standby, shutdown mode, wakeup, power consumption]
+
+  - id: serial-uart
+    label: Asynchronous serial communication
+    terms: [UART, USART, baud rate, serial port, asynchronous serial]
+
+  - id: dma-transfer
+    label: Direct memory access
+    terms: [DMA, direct memory access, DMA stream, DMA channel, scatter-gather]
+
+  - id: formal-verification
+    label: Formal verification of C code
+    terms:
+      - ACSL
+      - Frama-C
+      - function contract
+      - precondition
+      - postcondition
+      - formal verification
+      - deductive verification
+
+  - id: firmware-update
+    label: Firmware update
+    terms: [firmware update, bootloader, in-application programming, IAP, DFU, flash programming]
+    related: [lifecycle-security]

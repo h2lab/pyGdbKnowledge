@@ -11,12 +11,19 @@ import pytest
 from pydantic import ValidationError
 
 from silicore_knowledge.storage.catalog import (
+    _MIGRATIONS,  # noqa: PLC2701
     SCHEMA_VERSION,
     Catalog,
     CatalogError,
     DuplicateDocumentError,
 )
-from silicore_knowledge.storage.models import Chunk, Document, Section, SourceType
+from silicore_knowledge.storage.models import (
+    Chunk,
+    Document,
+    SearchFilters,
+    Section,
+    SourceType,
+)
 
 HASH_A = "a" * 64
 HASH_B = "b" * 64
@@ -175,3 +182,50 @@ def test_models_validate_identifiers() -> None:
         _document(document_id="../etc")
     with pytest.raises(ValidationError):
         _document(content_hash="xyz")
+
+
+def test_document_keywords_roundtrip_and_reach_the_fts_index(catalog: Catalog) -> None:
+    """Keywords are stored with the document and match its chunks in FTS5."""
+    document = _document().model_copy(update={"keywords": ("readout protection", "rdp")})
+    catalog.add_document(document)
+    loaded = catalog.get_document("ds-1")
+    assert loaded is not None and loaded.keywords == ("readout protection", "rdp")
+    catalog.replace_content("ds-1", *_content())
+    assert _fts_count(catalog, '"readout protection"') == 2  # every chunk of the document
+    hits = catalog.search_chunks('"rdp"', SearchFilters(), 10)
+    assert {hit.chunk.document_id for hit in hits} == {"ds-1"}
+    assert hits[0].document.keywords == ("readout protection", "rdp")
+    # Chunks themselves stay free of the denormalized column.
+    assert catalog.section_chunks("ds-1", "usart") == list(_content()[1])
+
+
+def test_catalog_without_keywords_is_migrated_in_place(tmp_path: Path) -> None:
+    """A pre-keywords database is upgraded and its content stays searchable."""
+    path = tmp_path / "catalog.db"
+    with closing(sqlite3.connect(path)) as db:
+        for script in _MIGRATIONS[:2]:
+            db.executescript(script)
+        db.execute(
+            "INSERT INTO documents (document_id, title, content_hash, source_type, status,"
+            " version, indexed_at) VALUES ('d1', 'T', ?, 'official', 'active', 1,"
+            " '2026-01-01T00:00:00+00:00')",
+            (HASH_A,),
+        )
+        db.execute(
+            "INSERT INTO sections (document_id, section_id, title, path, ordinal)"
+            " VALUES ('d1', 's1', 'S', 'S', 0)"
+        )
+        db.execute(
+            "INSERT INTO chunks (chunk_id, document_id, section_id, ordinal, text,"
+            " content_hash, section_path) VALUES ('d1:0', 'd1', 's1', 0, 'USART_ISR flags', ?,"
+            " 'S')",
+            (HASH_B,),
+        )
+        db.execute("PRAGMA user_version = 2")
+        db.commit()
+    catalog = Catalog(path)
+    assert catalog.stats().schema_version == SCHEMA_VERSION
+    document = catalog.get_document("d1")
+    assert document is not None and document.keywords == ()
+    hits = catalog.search_chunks('"usart_isr"', SearchFilters(), 10)
+    assert [hit.chunk.chunk_id for hit in hits] == ["d1:0"]

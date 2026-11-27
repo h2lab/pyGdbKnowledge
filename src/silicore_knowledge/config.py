@@ -117,6 +117,16 @@ class OcrSettings(_Section):
     min_chars_per_page: int = Field(default=40, ge=1)
 
 
+class RetrievalSettings(_Section):
+    """Retrieval-side options.
+
+    ``concepts_path`` points to the declarative concept registry used for controlled query
+    expansion; None disables expansion.
+    """
+
+    concepts_path: Path | None = None
+
+
 class Settings(_Section):
     """Complete service settings."""
 
@@ -128,6 +138,7 @@ class Settings(_Section):
     auth: AuthSettings = AuthSettings()
     ingestion: IngestionSettings = IngestionSettings()
     ocr: OcrSettings = OcrSettings()
+    retrieval: RetrievalSettings = RetrievalSettings()
     limits: LimitSettings = LimitSettings()
 
     @model_validator(mode="after")

@@ -3,6 +3,7 @@
 
 """SQLite catalog with an FTS5 index for exact-match search."""
 
+import json
 import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
@@ -110,12 +111,46 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX audit_events_document ON audit_events (document_id, event_id);
     """,
+    # Document keywords (generic retrieval terms): stored as JSON on the document and
+    # denormalized on its chunks so the FTS index can match them.
+    """
+    ALTER TABLE documents ADD COLUMN keywords TEXT NOT NULL DEFAULT '';
+    ALTER TABLE chunks ADD COLUMN doc_keywords TEXT NOT NULL DEFAULT '';
+    DROP TRIGGER chunks_ai;
+    DROP TRIGGER chunks_ad;
+    DROP TRIGGER chunks_au;
+    DROP TABLE chunks_fts;
+    CREATE VIRTUAL TABLE chunks_fts USING fts5 (
+        text, section_path, peripheral, doc_keywords,
+        content='chunks', content_rowid='rowid',
+        tokenize="unicode61 tokenchars '_'"
+    );
+    CREATE TRIGGER chunks_ai AFTER INSERT ON chunks BEGIN
+        INSERT INTO chunks_fts (rowid, text, section_path, peripheral, doc_keywords)
+        VALUES (new.rowid, new.text, new.section_path, new.peripheral, new.doc_keywords);
+    END;
+    CREATE TRIGGER chunks_ad AFTER DELETE ON chunks BEGIN
+        INSERT INTO chunks_fts (chunks_fts, rowid, text, section_path, peripheral, doc_keywords)
+        VALUES ('delete', old.rowid, old.text, old.section_path, old.peripheral,
+                old.doc_keywords);
+    END;
+    CREATE TRIGGER chunks_au AFTER UPDATE ON chunks BEGIN
+        INSERT INTO chunks_fts (chunks_fts, rowid, text, section_path, peripheral, doc_keywords)
+        VALUES ('delete', old.rowid, old.text, old.section_path, old.peripheral,
+                old.doc_keywords);
+        INSERT INTO chunks_fts (rowid, text, section_path, peripheral, doc_keywords)
+        VALUES (new.rowid, new.text, new.section_path, new.peripheral, new.doc_keywords);
+    END;
+    INSERT INTO chunks_fts (chunks_fts) VALUES ('rebuild');
+    """,
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
 
-# BM25 weights for (text, section_path, peripheral); tuned during corpus evaluation.
-_BM25_WEIGHTS = "1.0, 1.5, 0.5"
+# BM25 weights for (text, section_path, peripheral, doc_keywords); tuned during corpus
+# evaluation. Keywords are curated document-level signals: they help a query reach the
+# document without overwhelming in-text matches.
+_BM25_WEIGHTS = "1.0, 1.5, 0.5, 0.8"
 _CHUNK_COLUMNS = (
     "chunk_id",
     "document_id",
@@ -136,6 +171,7 @@ _DOCUMENT_COLUMNS = (
     "document_type",
     "revision",
     "source_url",
+    "keywords",
     "page_count",
     "version",
     "indexed_at",
@@ -148,7 +184,7 @@ _HIT_SELECT = (
     " c.content_hash, c.section_path, c.peripheral, c.page,"
     " d.title AS d_title, d.content_hash AS d_content_hash, d.source_type,"
     " d.status, d.manufacturer, d.device_family, d.device, d.document_type,"
-    " d.revision, d.source_url, d.page_count, d.version, d.indexed_at"
+    " d.revision, d.source_url, d.keywords, d.page_count, d.version, d.indexed_at"
 )
 
 
@@ -236,8 +272,8 @@ class Catalog:
                 db.execute(
                     "INSERT INTO documents (document_id, title, content_hash, source_type,"
                     " status, manufacturer, device_family, device, document_type, revision,"
-                    " source_url, page_count, version, indexed_at)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " source_url, keywords, page_count, version, indexed_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         stored.document_id,
                         stored.title,
@@ -250,6 +286,7 @@ class Catalog:
                         stored.document_type,
                         stored.revision,
                         stored.source_url,
+                        _dump_keywords(stored.keywords),
                         stored.page_count,
                         stored.version,
                         stored.indexed_at.isoformat(),
@@ -397,13 +434,13 @@ class Catalog:
             raise CatalogError("section or chunk belongs to a different document")
         try:
             with self._connect() as db:
-                if (
-                    db.execute(
-                        "SELECT 1 FROM documents WHERE document_id = ?", (document_id,)
-                    ).fetchone()
-                    is None
-                ):
+                row = db.execute(
+                    "SELECT keywords FROM documents WHERE document_id = ?", (document_id,)
+                ).fetchone()
+                if row is None:
                     raise CatalogError(f"unknown document {document_id!r}")
+                # Document keywords are denormalized on the chunks so FTS5 can match them.
+                doc_keywords = " ".join(_load_keywords(row["keywords"]))
                 db.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
                 db.execute("DELETE FROM sections WHERE document_id = ?", (document_id,))
                 db.executemany(
@@ -424,8 +461,8 @@ class Catalog:
                 )
                 db.executemany(
                     "INSERT INTO chunks (chunk_id, document_id, section_id, ordinal, text,"
-                    " content_hash, section_path, peripheral, page)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " content_hash, section_path, peripheral, page, doc_keywords)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         (
                             c.chunk_id,
@@ -437,6 +474,7 @@ class Catalog:
                             c.section_path,
                             c.peripheral,
                             c.page,
+                            doc_keywords,
                         )
                         for c in chunks
                     ],
@@ -466,9 +504,11 @@ class Catalog:
 
     def section_chunks(self, document_id: str, section_id: str) -> list[Chunk]:
         """Return the chunks of a section in reading order."""
+        columns = ", ".join(_CHUNK_COLUMNS)
         with self._connect() as db:
             rows = db.execute(
-                "SELECT * FROM chunks WHERE document_id = ? AND section_id = ? ORDER BY ordinal",
+                f"SELECT {columns} FROM chunks"
+                " WHERE document_id = ? AND section_id = ? ORDER BY ordinal",
                 (document_id, section_id),
             ).fetchall()
         return [Chunk(**dict(row)) for row in rows]
@@ -557,8 +597,20 @@ class Catalog:
         return CatalogStats(schema_version=SCHEMA_VERSION, **counts)
 
 
+def _dump_keywords(keywords: tuple[str, ...]) -> str:
+    return json.dumps(list(keywords)) if keywords else ""
+
+
+def _load_keywords(stored: str | None) -> tuple[str, ...]:
+    if not stored:
+        return ()
+    loaded = json.loads(stored)
+    return tuple(str(keyword) for keyword in loaded)
+
+
 def _document(row: sqlite3.Row | dict[str, Any]) -> Document:
     data = dict(row)
     data["source_type"] = SourceType(data["source_type"])
     data["status"] = DocumentStatus(data["status"])
+    data["keywords"] = _load_keywords(data.get("keywords"))
     return Document(**data)

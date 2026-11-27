@@ -15,6 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{0,127}$"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
+# One retrieval keyword or short phrase attached to a document by the operator.
+Keyword = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+MAX_KEYWORDS = 16
+
 
 @unique
 class SourceType(StrEnum):
@@ -51,6 +55,7 @@ class Document(_Model):
     document_type: str | None = None
     revision: str | None = None
     source_url: str | None = None
+    keywords: tuple[Keyword, ...] = Field(default=(), max_length=MAX_KEYWORDS)
     page_count: int | None = Field(default=None, ge=0)
     version: int = Field(default=1, ge=1)
     indexed_at: datetime | None = None

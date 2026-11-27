@@ -4,6 +4,7 @@
 """Exact-match search over the FTS5 index."""
 
 import re
+from collections.abc import Sequence
 
 from ..storage.catalog import Catalog
 from ..storage.models import SearchFilters, SearchHit
@@ -65,6 +66,45 @@ def build_identifier_query(text: str) -> str | None:
         if len(seen) == MAX_TERMS:
             break
     return " OR ".join(f'"{term}"' for term in seen) or None
+
+
+def build_expansion_query(terms: Sequence[str]) -> str | None:
+    """Turn controlled expansion terms into a safe FTS5 expression.
+
+    Each term becomes a quoted phrase of its word characters, so multi-word aliases such as
+    ``readout protection`` match consecutive tokens and nothing can inject FTS5 syntax.
+
+    Parameters
+    ----------
+    terms : Sequence[str]
+        Expansion terms from the concept registry.
+
+    Returns
+    -------
+    str | None
+        FTS5 expression, or None when no term holds a searchable token.
+    """
+    phrases: dict[str, None] = {}
+    for term in terms:
+        tokens = [token.lower() for token in _TERM_RE.findall(term)]
+        if not tokens:
+            continue
+        phrases.setdefault(" ".join(tokens), None)
+        if len(phrases) == MAX_TERMS:
+            break
+    if not phrases:
+        return None
+    return " OR ".join(f'"{phrase}"' for phrase in phrases)
+
+
+def expansion_search(
+    catalog: Catalog, terms: Sequence[str], filters: SearchFilters | None = None, limit: int = 20
+) -> list[SearchHit]:
+    """Search chunks by controlled expansion terms only; empty when none is searchable."""
+    match = build_expansion_query(terms)
+    if match is None:
+        return []
+    return catalog.search_chunks(match, filters or SearchFilters(), limit)
 
 
 def identifier_search(

@@ -193,6 +193,18 @@ questions:
     expect:
       - document: H2Lab STIG MAJ-001
         contains: [A/B update state machine]
+  - id: arm-den0107-secure-boot
+    category: security
+    query: requirements for secure boot chain of trust
+    expect:
+      - document: Arm DEN0107
+        contains: [image integrity]
+  - id: intent-physical-intrusion
+    category: intent
+    query: Detect an intruder opening the enclosure before components are removed
+    expect:
+      - document: H2Lab STIG PHY-001
+        contains: [exfiltration window]
 
   # --- V1 corpus enrichment: language and assembly references ---
   - id: c11-atomics
@@ -203,10 +215,10 @@ questions:
         contains: [atomic_compare_exchange]
   - id: python-pep257
     category: language
-    query: Python PEP 257 docstring conventions
+    query: PEP 257 one-line docstring summary
     expect:
       - document: PEP 257
-        contains: [docstring]
+        contains: [D200, "One-line docstring"]
   - id: arm-thumb2-instructions
     category: assembly
     query: Thumb-2 instruction set assembly reference manual

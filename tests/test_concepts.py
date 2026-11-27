@@ -96,7 +96,21 @@ def test_repository_concepts_avoid_expanding_precise_register_queries() -> None:
     """Specific RCC register questions stay exact; intent phrases still activate concepts."""
     registry = load_concepts(Path(__file__).parent.parent / "config" / "concepts.yaml")
     assert registry.expansion_terms("RCC AHB1 peripheral clock enable register") == ()
+    assert (
+        registry.expansion_terms("RCC peripherals independent clock configuration register") == ()
+    )
     assert registry.expansion_terms("configure the system clock")
     assert {"JTAG", "SWD"} <= set(registry.expansion_terms("lock the debug interface"))
     assert registry.expansion_terms("update the firmware in the field")
     assert registry.expansion_terms("extend the battery life")
+
+
+def test_repository_concepts_map_physical_intrusion_to_hardware_security_terms() -> None:
+    """A physical-intrusion intent expands to the terms used by the security guide."""
+    registry = load_concepts(Path(__file__).parent.parent / "config" / "concepts.yaml")
+    terms = registry.expansion_terms(
+        "Detect an intruder opening the enclosure before components are removed"
+    )
+    assert {"physical attack surface", "forced opening", "active detection and reaction"} <= set(
+        terms
+    )

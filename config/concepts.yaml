@@ -34,6 +34,20 @@ concepts:
     label: Device lifecycle security
     terms: [lifecycle, secure boot, root of trust, TrustZone, secure firmware, tamper]
 
+  - id: physical-tampering
+    label: Physical access and tampering
+    terms:
+      - physical access
+      - physical attack surface
+      - opening the enclosure
+      - unauthorized physical access
+      - component extraction
+      - extraction of components
+      - forced opening
+      - tamper detection
+      - active detection and reaction
+      - PCB hardening
+
   - id: memory-protection
     label: Memory protection
     terms: [MPU, memory protection unit, write protection, access control, privileged access]
@@ -41,7 +55,6 @@ concepts:
   - id: clock-configuration
     label: Clock configuration
     terms:
-      - clock configuration
       - system clock
       - clock tree
       - PLL

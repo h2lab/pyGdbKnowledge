@@ -14,6 +14,7 @@ allowed_domains:
   - api.github.com
   - blog.h2lab.org
   - class.ece.iastate.edu
+  - documentation-service.arm.com
   - docs.amd.com
   - pep257.readthedocs.io
   - raw.githubusercontent.com
@@ -150,6 +151,17 @@ sources:
         title: Thumb-2 Supplement Reference Manual
         document_type: programming-manual
         keywords: [arm, thumb-2, cortex-m, instruction set, assembler, assembly]
+
+  - name: arm-boot-security
+    kind: urls
+    source_type: official
+    manufacturer: Arm
+    documents:
+      - url: https://documentation-service.arm.com/static/68775ff446dc1e49e34ba2b0?token=
+        title: Arm DEN0107 Base Boot Security Requirements v1.4
+        revision: "1.4"
+        document_type: requirement-document
+        keywords: [base boot requirements, secure boot, platform security, SystemReady, UEFI]
 
   - name: i2c-specification
     kind: urls

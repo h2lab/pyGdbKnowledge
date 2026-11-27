@@ -71,6 +71,9 @@ should come from [config/taxonomy.yaml](../config/taxonomy.yaml): `sync` warns a
 types (add the type to the taxonomy first). `keywords` are indexed with the document's
 passages and help queries that use another vocabulary reach it.
 
+The bundled corpus includes NIST SP 800-218 SSDF v1.1 as a high-level secure development
+best-practice guide; it does not provide language-specific coding rules.
+
 ## Query expansion concepts
 
 [config/concepts.yaml](../config/concepts.yaml) (configured through `retrieval.concepts_path`)

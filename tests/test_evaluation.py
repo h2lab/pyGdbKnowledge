@@ -108,6 +108,35 @@ def test_u5_clock_question_requires_clock_enable_evidence(
 
 
 @pytest.mark.parametrize(
+    ("title", "text", "relevant"),
+    [
+        ("NIST SP 800-218", "PW.7.1: determine whether code review should be used", True),
+        ("NIST SP 800-218", "PW.8.1: test executable code for vulnerabilities", False),
+        ("Other development guide", "PW.7.1: determine whether code review is needed", False),
+    ],
+)
+def test_ssdf_question_requires_code_review_evidence(title: str, text: str, relevant: bool) -> None:
+    """Unrelated NIST passages or other guides do not satisfy the SSDF question."""
+    questions = load_questions(Path(__file__).parent.parent / "config" / "eval" / "questions.yaml")
+    question = next(q for q in questions if q.id == "nist-ssdf-code-review")
+    document = Document(
+        document_id=title.lower().replace(" ", "-"),
+        title=title,
+        content_hash="c" * 64,
+        source_type=SourceType.OFFICIAL,
+    )
+    chunk = Chunk(
+        chunk_id="example:c1",
+        document_id=document.document_id,
+        ordinal=0,
+        text=text,
+        content_hash="d" * 64,
+    )
+    hit = SearchHit(chunk=chunk, document=document, score=1.0)
+    assert any(expectation.matches(hit) for expectation in question.expect) is relevant
+
+
+@pytest.mark.parametrize(
     "content",
     [
         [{"id": "a", "query": "x", "expect": []}],

@@ -16,6 +16,7 @@ allowed_domains:
   - class.ece.iastate.edu
   - documentation-service.arm.com
   - docs.amd.com
+  - nvlpubs.nist.gov
   - pep257.readthedocs.io
   - raw.githubusercontent.com
   - web.cs.dal.ca
@@ -126,6 +127,16 @@ sources:
         title: H2Lab STIG MAJ-001
         document_type: security-guide
         keywords: [software update, firmware update, security, maintenance]
+
+  - name: nist-ssdf
+    kind: urls
+    source_type: official
+    documents:
+      - url: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-218.pdf
+        title: NIST SP 800-218 Secure Software Development Framework
+        revision: "1.1"
+        document_type: best-practice
+        keywords: [ssdf, secure software development, software development lifecycle, software security, vulnerability management]
 
   # Language references. PEP 257 is classified as an RFC-like proposal, as requested.
   - name: language-references

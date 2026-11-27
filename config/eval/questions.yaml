@@ -198,6 +198,12 @@ questions:
     expect:
       - document: H2Lab STIG EMDEV-001
         contains: [input bounds]
+  - id: nist-ssdf-code-review
+    category: development
+    query: NIST SSDF review source code to identify vulnerabilities before release
+    expect:
+      - document: NIST SP 800-218
+        contains: [PW.7.1, code review]
   - id: h2lab-secure-update
     category: security
     query: secure maintenance firmware update

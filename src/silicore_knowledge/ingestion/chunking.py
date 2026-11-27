@@ -55,7 +55,13 @@ def _norm(text: str) -> str:
     return " ".join(text.split()).casefold()
 
 
-def _find_heading(lines: list[_Line], start: int, page: int, title: str) -> tuple[int, int] | None:
+def _find_heading(
+    lines: list[_Line],
+    start: int,
+    page: int,
+    title: str,
+    references: dict[tuple[str, str], int],
+) -> tuple[int, int] | None:
     """Locate a heading on its start page; return ``(index, line_count)``."""
     wanted = _norm(title)
     for index in range(start, len(lines)):
@@ -86,7 +92,10 @@ def _find_heading(lines: list[_Line], start: int, page: int, title: str) -> tupl
                 or (
                     len(prefix) == 1
                     and "A" <= prefix <= "Z"
-                    and re.match(rf"appendix {prefix.lower()}\b", wanted) is not None
+                    and (
+                        re.match(rf"appendix {prefix.lower()}\b", wanted) is not None
+                        or references.get((prefix, wanted), page) < page
+                    )
                 )
             )
         ):
@@ -105,10 +114,28 @@ def _split_sections(
         for text in page.text.splitlines()
         if text.strip()
     ]
+    titles = {_norm(section.title) for section in document.sections}
+    references: dict[tuple[str, str], int] = {}
+    for line in lines:
+        words = line.text.split()
+        if (
+            len(words) < 3
+            or len(words[0]) != 1
+            or not "A" <= words[0] <= "Z"
+            or not words[-1].isdecimal()
+        ):
+            continue
+        title_words = words[1:-1]
+        while title_words and set(title_words[-1]) == {"."}:
+            title_words.pop()
+        title = _norm(" ".join(title_words))
+        if title in titles:
+            key = (words[0], title)
+            references[key] = min(line.page, references.get(key, line.page))
     starts: list[tuple[int, int]] = []
     cursor = 0
     for section in document.sections:
-        found = _find_heading(lines, cursor, section.page_start, section.title)
+        found = _find_heading(lines, cursor, section.page_start, section.title, references)
         if found is not None:
             begin, count = found
             starts.append((begin + count, begin))

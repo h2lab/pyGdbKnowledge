@@ -116,6 +116,56 @@ def test_page_leading_appendix_label_matches_outline(label: str, is_heading: boo
     assert [(chunk.section_id, chunk.text, chunk.page) for chunk in chunks] == expected
 
 
+@pytest.mark.parametrize(
+    ("reference", "is_heading"),
+    [
+        ("A Comparative table of vendor JTAG implementations 24", True),
+        ("A Comparative table of vendor JTAG implementations . . . 24", True),
+        ("B Comparative table of vendor JTAG implementations 24", False),
+        ("A Another heading 24", False),
+        ("A Comparative table of vendor JTAG implementations", False),
+    ],
+)
+def test_page_leading_label_matches_earlier_heading_reference(
+    reference: str, is_heading: bool
+) -> None:
+    """A heading reference confirms a page-leading letter omitted by the PDF outline."""
+    title = "Comparative table of vendor JTAG implementations"
+    document = _doc(
+        [
+            f"Contents\n{reference}",
+            "Previous heading\nPrevious body",
+            "A\nComparative table of vendor\nJTAG implementations\nNew body",
+        ],
+        [(1, "Previous heading", "Previous heading", 2, 3), (1, title, title, 3, 3)],
+    )
+    chunks = chunk_document("ds", document, SETTINGS).chunks
+    expected = [("s0000", "Previous body", 2)]
+    if not is_heading:
+        expected.append(("s0000", "A", 3))
+    expected.append(("s0001", "New body", 3))
+    assert [(chunk.section_id, chunk.text, chunk.page) for chunk in chunks] == expected
+
+
+def test_later_heading_reference_does_not_consume_previous_content() -> None:
+    """A reference after the heading cannot confirm its preceding letter."""
+    title = "Example heading"
+    document = _doc(
+        [
+            "Previous heading\nPrevious body",
+            f"A\n{title}\nNew body",
+            f"Index\nA {title} 5",
+        ],
+        [(1, "Previous heading", "Previous heading", 1, 2), (1, title, title, 2, 3)],
+    )
+    chunks = chunk_document("ds", document, SETTINGS).chunks
+    assert [(chunk.section_id, chunk.text, chunk.page) for chunk in chunks[:3]] == [
+        ("s0000", "Previous body", 1),
+        ("s0000", "A", 2),
+        ("s0001", "New body", 2),
+    ]
+
+
 def test_missing_heading_falls_back_to_page_start() -> None:
     """When the heading is not in the text, the section starts at its page."""
     document = _doc(["p1 text", "p2 text"], [(1, "Ghost", "Ghost", 2, 2)])

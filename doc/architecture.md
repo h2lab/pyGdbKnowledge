@@ -86,8 +86,9 @@ local file -> validation + SHA-256 + duplicate/version detection
   section path, page and peripheral context, limits overlap, and uses stable chunk ids. PDF
   chunks never cross a page boundary, so each passage's page identifies all of its text;
   structures continuing across pages are consequently split at that boundary. A standalone
-  number, or an appendix letter matching the outline, at the start of a page immediately before
-  a recognized heading is treated as part of that heading rather than the preceding section.
+  number, or an appendix letter confirmed by the outline or an earlier reference formatted as
+  a table-of-contents entry, at the start of a page immediately before a recognized heading is
+  treated as part of that heading rather than the preceding section.
   Oversize PDF lines are split at spaces where possible, or within a long token when necessary,
   to keep each passage within the configured chunk size. SVD passages also respect that limit:
   long descriptions are split at spaces where possible, with register and bit-field context

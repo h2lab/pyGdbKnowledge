@@ -88,7 +88,9 @@ local file -> validation + SHA-256 + duplicate/version detection
   structures continuing across pages are consequently split at that boundary. Oversize PDF
   lines are split at spaces where possible, or within a long token when necessary, to keep
   each passage within the configured chunk size.
-- Unknown metadata stays null; values are never invented.
+- Operator-supplied metadata stays null when unknown. PDF peripheral metadata is inferred
+  heuristically from section paths, so it may be incorrect; identifiers immediately preceded
+  or followed by `macro` or `pragma` are not treated as registers.
 - Operator-supplied `keywords` (manifest entries, CLI `--keyword`, admin API) are stored on the
   document and indexed with its passages, so a query can reach a document whose body uses
   another vocabulary. They are screened like every other metadata value.

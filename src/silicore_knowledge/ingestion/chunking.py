@@ -20,6 +20,8 @@ from .extract import ExtractedDocument, ExtractedSection
 _BITFIELD_RE = re.compile(r"^Bits?\s+\d+(:\d+)?\b")
 _REGISTER_RE = re.compile(r"\b([A-Z][A-Z0-9]{1,11})_[A-Z0-9_]+\b")
 _ACRONYM_RE = re.compile(r"\(([A-Z][A-Z0-9]{1,11})\)")
+_SOFTWARE_BEFORE_RE = re.compile(r"\b(?:macro|pragma)\s+$", re.IGNORECASE)
+_SOFTWARE_AFTER_RE = re.compile(r"\s+(?:macro|pragma)\b", re.IGNORECASE)
 _SHORT_LINE = 30
 _MIN_TABLE_LINES = 6
 _MIN_PARTIAL_HEADING = 8
@@ -230,8 +232,9 @@ def _split_block(block: _Block, max_chars: int, overlap: int) -> list[list[_Line
 def infer_peripheral(path: str) -> str | None:
     """Infer a peripheral name from a section path, or None when it is not evident.
 
-    A register name such as ``USART_CR1`` gives ``USART``; otherwise a parenthesized acronym
-    such as ``(ICACHE)`` is used. The deepest section wins.
+    A register name such as ``USART_CR1`` gives ``USART``, except when directly preceded or
+    followed by ``macro`` or ``pragma``; otherwise a parenthesized acronym such as ``(ICACHE)``
+    is used. The deepest section wins.
 
     Parameters
     ----------
@@ -245,13 +248,16 @@ def infer_peripheral(path: str) -> str | None:
     """
     titles = path.split(" > ")
     for title in reversed(titles):
-        match = _REGISTER_RE.search(title)
-        if match:
+        for match in _REGISTER_RE.finditer(title):
+            if _SOFTWARE_BEFORE_RE.search(title[: match.start()]) or _SOFTWARE_AFTER_RE.match(
+                title[match.end() :]
+            ):
+                continue
             return match.group(1)
     for title in reversed(titles):
-        match = _ACRONYM_RE.search(title)
-        if match:
-            return match.group(1)
+        acronym_match = _ACRONYM_RE.search(title)
+        if acronym_match:
+            return acronym_match.group(1)
     return None
 
 

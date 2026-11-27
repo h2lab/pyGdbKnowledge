@@ -194,6 +194,12 @@ def test_ids_are_stable_and_valid_for_the_catalog(tmp_path: Path) -> None:
     [
         ("30 USART > 30.7 Registers > 30.7.1 Control register 1 (USART_CR1)", "USART"),
         ("3 Overview > 3.2.1 Instruction cache (ICACHE)", "ICACHE"),
+        ("7.6 Floating-point environment <fenv.h> > 7.6.1 The FENV_ACCESS pragma", None),
+        ("7.17 Atomics <stdatomic.h> > 7.17.2.1 The ATOMIC_VAR_INIT macro", None),
+        ("Macro ATOMIC_VAR_INIT", None),
+        ("PRAGMA FENV_ACCESS", None),
+        ("Control register (USART_CR1) > The ATOMIC_VAR_INIT macro", "USART"),
+        ("ATOMIC_VAR_INIT macro controlling register USART_CR1", "USART"),
         ("1 Introduction", None),
         ("Notes:", None),
     ],
@@ -201,6 +207,26 @@ def test_ids_are_stable_and_valid_for_the_catalog(tmp_path: Path) -> None:
 def test_infer_peripheral(path: str, peripheral: str | None) -> None:
     """Peripheral names come from register names or parenthesized acronyms only."""
     assert infer_peripheral(path) == peripheral
+
+
+def test_software_macro_is_not_indexed_as_a_peripheral(tmp_path: Path) -> None:
+    """A C macro remains searchable without becoming a hardware filter value."""
+    title = "The ATOMIC_VAR_INIT macro"
+    document = _doc(
+        [f"{title}\nATOMIC_VAR_INIT initializes an atomic object."], [(1, title, title, 1, 1)]
+    )
+    result = chunk_document("c11", document, SETTINGS)
+    assert result.chunks[0].peripheral is None
+
+    catalog = Catalog(tmp_path / "c.db")
+    catalog.add_document(
+        Document(
+            document_id="c11", title="C11", content_hash="a" * 64, source_type=SourceType.OFFICIAL
+        )
+    )
+    catalog.replace_content("c11", list(result.sections), list(result.chunks))
+    assert catalog.search_chunks('"ATOMIC_VAR_INIT"', SearchFilters(), 5)
+    assert not catalog.search_chunks('"ATOMIC_VAR_INIT"', SearchFilters(peripheral="ATOMIC"), 5)
 
 
 def test_overlap_setting_is_bounded() -> None:

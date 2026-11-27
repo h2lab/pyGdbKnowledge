@@ -78,7 +78,9 @@ declares concepts with their aliases, acronyms and related concepts. When a quer
 concept, the sibling and related terms form one extra lexical ranking, so an intent such as
 "prevent firmware extraction" can reach passages about readout protection, RDP, JTAG or SWD.
 Review this file like code: it directly shapes retrieval. After editing it, run the evaluation
-(the `intent` category measures expansion) — no reindexing is needed.
+(the `intent` category measures expansion) — no reindexing is needed. A narrowly triggered
+boot-integrity concept maps queries about modified firmware to image-integrity and signature
+verification vocabulary without broadening other lifecycle-security queries.
 
 ## Index maintenance
 

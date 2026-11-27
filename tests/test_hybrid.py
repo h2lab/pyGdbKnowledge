@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from silicore_knowledge.retrieval.concepts import Concept, ConceptRegistry
+from silicore_knowledge.retrieval.concepts import Concept, ConceptRegistry, load_concepts
 from silicore_knowledge.retrieval.embeddings import EmbeddingError
 from silicore_knowledge.retrieval.hybrid import HybridSearcher
 from silicore_knowledge.retrieval.vector_store import InMemoryVectorStore, VectorRecord
@@ -186,6 +186,46 @@ def test_concept_expansion_reaches_another_vocabulary(catalog: Catalog) -> None:
     assert [h.chunk.chunk_id for h in hits] == ["official:1"]
     # Expansion respects the metadata filters like every other ranking.
     assert searcher.search("PLL settings", SearchFilters(manufacturer="NXP"), 5) == []
+
+
+def test_modified_firmware_intent_finds_boot_integrity_among_lifecycle_noise(
+    catalog: Catalog,
+) -> None:
+    """A focused expansion finds integrity evidence among unrelated security passages."""
+    catalog.add_document(
+        Document(
+            document_id="boot",
+            title="Boot security",
+            content_hash="c" * 64,
+            source_type=SourceType.OFFICIAL,
+        )
+    )
+    section = Section(document_id="boot", section_id="s", title="S", path="S", ordinal=0)
+    texts = [
+        "modified firmware after reset secure boot root of trust TrustZone secure firmware tamper"
+        for _ in range(12)
+    ] + ["firmware image integrity verified by signature verification"]
+    chunks = [
+        Chunk(
+            chunk_id=f"boot:{i:02}",
+            document_id="boot",
+            section_id="s",
+            ordinal=i,
+            text=text,
+            content_hash="d" * 64,
+            section_path="S",
+        )
+        for i, text in enumerate(texts)
+    ]
+    catalog.replace_content("boot", [section], chunks)
+    registry = load_concepts(Path(__file__).parent.parent / "config" / "concepts.yaml")
+    query = "prevent modified firmware from executing after reset"
+
+    assert "boot:12" not in {
+        hit.chunk.chunk_id for hit in HybridSearcher(catalog).search(query, SearchFilters(), 5)
+    }
+    hits = HybridSearcher(catalog, concepts=registry).search(query, SearchFilters(), 5)
+    assert "boot:12" in {hit.chunk.chunk_id for hit in hits}
 
 
 def test_unmatched_concepts_do_not_change_the_ranking(catalog: Catalog) -> None:

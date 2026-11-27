@@ -145,4 +145,5 @@ def test_repository_concepts_map_modified_firmware_to_secure_boot_terms() -> Non
     """A firmware-integrity intent expands to secure-boot evidence vocabulary."""
     registry = load_concepts(Path(__file__).parent.parent / "config" / "concepts.yaml")
     terms = registry.expansion_terms("prevent modified firmware from executing after reset")
-    assert {"secure boot", "image integrity"} <= set(terms)
+    assert set(terms) == {"image integrity", "signature verification"}
+    assert "image integrity" not in registry.expansion_terms("secure boot chain of trust")

@@ -32,15 +32,12 @@ concepts:
 
   - id: lifecycle-security
     label: Device lifecycle security
-    terms:
-      - lifecycle
-      - secure boot
-      - root of trust
-      - TrustZone
-      - secure firmware
-      - tamper
-      - modified firmware
-      - image integrity
+    terms: [lifecycle, secure boot, root of trust, TrustZone, secure firmware, tamper]
+
+  - id: boot-integrity
+    label: Boot image integrity
+    terms: [image integrity, signature verification]
+    triggers: [modified firmware]
 
   - id: physical-tampering
     label: Physical access and tampering

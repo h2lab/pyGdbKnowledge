@@ -110,8 +110,9 @@ with their aliases, acronyms and related concepts (for example firmware extracti
 protection, RDP, JTAG, SWD, debug authentication). When a query names a concept, the other
 terms form one extra lexical ranking in the fusion. Expansion is declarative, reviewed with
 the configuration, bounded in matched concepts and added terms, and never derived from the
-query or a model (ANSSI R27). The `intent` category of `config/eval/questions.yaml` measures
-its effect.
+query or a model (ANSSI R27). Its RRF contribution is lower than a direct lexical, identifier
+or vector match; it acts as a bonus and does not reduce existing normalized scores. The
+`intent` category of `config/eval/questions.yaml` measures its effect.
 
 Source reliability: A official documentation, B official vendor support/forum, C community
 (GitHub, third-party forums), D agent hypothesis (never produced by this server).

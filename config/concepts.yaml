@@ -9,7 +9,15 @@
 concepts:
   - id: debug-access
     label: Debug access
-    terms: [JTAG, SWD, debug port, debug access, debug authentication, DAP, debug probe]
+    terms:
+      - JTAG
+      - SWD
+      - debug port
+      - debug interface
+      - debug access
+      - debug authentication
+      - DAP
+      - debug probe
 
   - id: firmware-extraction
     label: Firmware extraction protection
@@ -32,11 +40,28 @@ concepts:
 
   - id: clock-configuration
     label: Clock configuration
-    terms: [RCC, clock tree, PLL, prescaler, clock source, oscillator, HSE, HSI]
+    terms:
+      - clock configuration
+      - system clock
+      - clock tree
+      - PLL
+      - prescaler
+      - clock source
+      - oscillator
+      - HSE
+      - HSI
 
   - id: low-power
     label: Low-power operation
-    terms: [low power, sleep mode, stop mode, standby, shutdown mode, wakeup, power consumption]
+    terms:
+      - battery life
+      - low power
+      - sleep mode
+      - stop mode
+      - standby
+      - shutdown mode
+      - wakeup
+      - power consumption
 
   - id: serial-uart
     label: Asynchronous serial communication
@@ -56,8 +81,17 @@ concepts:
       - postcondition
       - formal verification
       - deductive verification
+      - formally specify
+      - formal specification
 
   - id: firmware-update
     label: Firmware update
-    terms: [firmware update, bootloader, in-application programming, IAP, DFU, flash programming]
+    terms:
+      - firmware update
+      - update the firmware
+      - bootloader
+      - in-application programming
+      - IAP
+      - DFU
+      - flash programming
     related: [lifecycle-security]

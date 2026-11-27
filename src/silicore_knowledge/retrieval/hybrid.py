@@ -18,6 +18,7 @@ logger = logging.getLogger("silicore_knowledge")
 RRF_K = 60
 CANDIDATE_FACTOR = 5
 MAX_CANDIDATES = 200
+EXPANSION_RRF_WEIGHT = 0.25
 
 # Multiplier applied per source reliability class; official documents rank first.
 DEFAULT_SOURCE_WEIGHTS: Mapping[SourceType, float] = {
@@ -91,28 +92,31 @@ class HybridSearcher:
         if limit < 1:
             return []
         candidates = min(max(limit * CANDIDATE_FACTOR, 20), MAX_CANDIDATES)
-        rankings: list[list[SearchHit]] = [
-            lexical_search(self._catalog, query, filters, candidates)
+        rankings: list[tuple[list[SearchHit], float, bool]] = [
+            (lexical_search(self._catalog, query, filters, candidates), 1.0, True)
         ]
         identifiers = identifier_search(self._catalog, query, filters, candidates)
         if identifiers:
-            rankings.append(identifiers)
+            rankings.append((identifiers, 1.0, True))
         expansion = self._expansion_ranking(query, filters, candidates)
         if expansion:
-            rankings.append(expansion)
+            rankings.append((expansion, EXPANSION_RRF_WEIGHT, False))
         vector_ranking = self._vector_ranking(query, filters, candidates)
         if vector_ranking is not None:
-            rankings.append(vector_ranking)
+            rankings.append((vector_ranking, 1.0, True))
 
         fused: dict[str, float] = {}
         hits: dict[str, SearchHit] = {}
-        for ranking in rankings:
+        for ranking, weight, _ in rankings:
             for rank, hit in enumerate(ranking, start=1):
                 chunk_id = hit.chunk.chunk_id
                 hits[chunk_id] = hit
-                fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (RRF_K + rank)
+                fused[chunk_id] = fused.get(chunk_id, 0.0) + weight / (RRF_K + rank)
 
-        best_possible = len(rankings) / (RRF_K + 1)
+        # Expansion is a low-confidence bonus, not another full retrieval modality. Excluding
+        # it from the normalizer prevents an active concept from lowering existing result scores
+        # and unexpectedly filtering them through min_score.
+        best_possible = sum(weight for _, weight, normalize in rankings if normalize) / (RRF_K + 1)
         scored = [
             (chunk_id, fused[chunk_id] * self._weights[hits[chunk_id].document.source_type])
             for chunk_id in fused
@@ -120,7 +124,7 @@ class HybridSearcher:
         scored.sort(key=lambda item: (-item[1], item[0]))
         results: list[SearchHit] = []
         for chunk_id, raw in scored:
-            score = raw / best_possible
+            score = min(raw / best_possible, 1.0)
             if score < min_score:
                 break
             results.append(hits[chunk_id].model_copy(update={"score": score}))
@@ -133,9 +137,9 @@ class HybridSearcher:
     ) -> list[SearchHit]:
         """Rank chunks by the controlled expansion terms of the query's concepts.
 
-        The expansion comes from the declarative registry only; it adds one ranking to the
-        fusion so a document using another vocabulary can surface without displacing exact
-        matches.
+        The expansion comes from the declarative registry only; its ranking has a lower RRF
+        weight than direct lexical, identifier, or vector matches so it can surface a document
+        using another vocabulary without overwhelming stronger evidence.
         """
         if self._concepts is None:
             return []

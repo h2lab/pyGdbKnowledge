@@ -90,3 +90,13 @@ def test_repository_concepts_are_valid() -> None:
     terms = registry.expansion_terms("prevent firmware extraction from the microcontroller")
     assert any("readout" in term.lower() for term in terms)
     assert any(term.upper() == "JTAG" for term in terms)
+
+
+def test_repository_concepts_avoid_expanding_precise_register_queries() -> None:
+    """Specific RCC register questions stay exact; intent phrases still activate concepts."""
+    registry = load_concepts(Path(__file__).parent.parent / "config" / "concepts.yaml")
+    assert registry.expansion_terms("RCC AHB1 peripheral clock enable register") == ()
+    assert registry.expansion_terms("configure the system clock")
+    assert {"JTAG", "SWD"} <= set(registry.expansion_terms("lock the debug interface"))
+    assert registry.expansion_terms("update the firmware in the field")
+    assert registry.expansion_terms("extend the battery life")

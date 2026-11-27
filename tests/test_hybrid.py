@@ -197,3 +197,36 @@ def test_unmatched_concepts_do_not_change_the_ranking(catalog: Catalog) -> None:
     assert with_registry.search(query, SearchFilters(), 5) == without.search(
         query, SearchFilters(), 5
     )
+
+
+def test_expansion_is_a_bounded_bonus_and_preserves_direct_matches(catalog: Catalog) -> None:
+    """Direct lexical evidence stays first and keeps its score threshold with expansion active."""
+    for document_id, text in (
+        ("z-exact", "directneedle only"),
+        ("a-expanded", "expandedneedle only"),
+    ):
+        catalog.add_document(
+            Document(
+                document_id=document_id,
+                title=document_id,
+                content_hash=("c" if document_id == "z-exact" else "d") * 64,
+                source_type=SourceType.OFFICIAL,
+            )
+        )
+        section = Section(document_id=document_id, section_id="s", title="S", path="S", ordinal=0)
+        chunk = Chunk(
+            chunk_id=f"{document_id}:0",
+            document_id=document_id,
+            section_id="s",
+            ordinal=0,
+            text=text,
+            content_hash="e" * 64,
+            section_path="S",
+        )
+        catalog.replace_content(document_id, [section], [chunk])
+
+    registry = ConceptRegistry([Concept(id="topic", terms=("conceptalias", "expandedneedle"))])
+    searcher = HybridSearcher(catalog, concepts=registry)
+    hits = searcher.search("directneedle conceptalias", SearchFilters(), 10, min_score=0.9)
+    assert [hit.chunk.chunk_id for hit in hits] == ["z-exact:0"]
+    assert hits[0].score == pytest.approx(1.0)

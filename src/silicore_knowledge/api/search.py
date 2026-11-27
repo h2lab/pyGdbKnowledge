@@ -51,9 +51,10 @@ class SearchResult(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    """Ranked results, best first."""
+    """Ranked results, best first, with an aggregate text-budget signal."""
 
     results: list[SearchResult]
+    context_truncated: bool = False
 
 
 def get_searcher(request: Request) -> HybridSearcher:
@@ -62,7 +63,11 @@ def get_searcher(request: Request) -> HybridSearcher:
     return searcher
 
 
-@router.post("/search", response_model=SearchResponse)
+@router.post(
+    "/search",
+    response_model=SearchResponse,
+    response_model_exclude_defaults=True,
+)
 def search(
     request: Request,
     body: SearchRequest,
@@ -83,8 +88,17 @@ def search(
         ",".join(hit.chunk.chunk_id for hit in hits),
     )
     results: list[SearchResult] = []
+    remaining_text_chars = limits.max_search_text_chars
+    context_truncated = False
     for hit in hits:
         chunk, document = hit.chunk, hit.document
+        if remaining_text_chars == 0:
+            context_truncated = True
+            break
+        text_limit = min(limits.max_text_chars, remaining_text_chars)
+        if text_limit < limits.max_text_chars and len(chunk.text) > text_limit:
+            context_truncated = True
+        text = chunk.text[:text_limit]
         results.append(
             SearchResult(
                 chunk_id=chunk.chunk_id,
@@ -101,8 +115,9 @@ def search(
                 keywords=document.keywords,
                 indexed_at=document.indexed_at,
                 url=document.source_url,
-                text=chunk.text[: limits.max_text_chars],
-                truncated=len(chunk.text) > limits.max_text_chars,
+                text=text,
+                truncated=len(chunk.text) > text_limit,
             )
         )
-    return SearchResponse(results=results)
+        remaining_text_chars -= len(text)
+    return SearchResponse(results=results, context_truncated=context_truncated)

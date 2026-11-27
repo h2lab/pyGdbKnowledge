@@ -45,6 +45,7 @@ limits:
   max_results: 20
   default_results: 8
   max_text_chars: 4000
+  max_search_text_chars: 32000
   max_query_chars: 500
   min_score: 0.0
   request_timeout_s: 20

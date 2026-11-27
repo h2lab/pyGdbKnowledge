@@ -145,6 +145,9 @@ curl -s -X POST $URL/api/v1/search \
 - `query`: natural language and/or identifiers (`RCC_AHB1ENR`, `0x40023800`). Identifiers
   with an underscore are matched exactly and boosted.
 - `limit`: bounded by `limits.max_results`.
+- Passage text is bounded by `limits.max_text_chars` per result and
+  `limits.max_search_text_chars` across the response. When the aggregate budget cuts a passage
+  or omits lower-ranked results, `context_truncated` is `true`.
 - `filters` (all optional, exact and case-insensitive): `manufacturer`, `device_family`,
   `device`, `peripheral`, `document_type` (list). Other keys are rejected.
 

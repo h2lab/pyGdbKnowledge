@@ -94,6 +94,7 @@ class LimitSettings(_Section):
     max_results: int = Field(default=20, ge=1, le=100)
     default_results: int = Field(default=8, ge=1, le=100)
     max_text_chars: int = Field(default=4000, ge=100)
+    max_search_text_chars: int = Field(default=32_000, ge=1)
     max_query_chars: int = Field(default=500, ge=1)
     min_score: float = Field(default=0.0, ge=0.0, le=1.0)
     request_timeout_s: float = Field(default=20.0, gt=0)

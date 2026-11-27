@@ -134,7 +134,8 @@ Source reliability: A official documentation, B official vendor support/forum, C
 Search request: `query`, optional `filters` (`manufacturer`, `device`, `peripheral`,
 `document_type`), `limit`. Search result: `chunk_id`, `document_id`, `title`, `section`,
 `page`, `score`, `source_type`, `keywords`, `text`, `url`, plus revision and indexing date
-when known.
+when known. Passage text is bounded per result and across the full response; `context_truncated`
+signals when the aggregate search-text budget clipped a passage or omitted lower-ranked results.
 
 ## Security
 

@@ -21,7 +21,12 @@ def client(tmp_path: Path) -> TestClient:
     """Client over a one-document catalog with small limits."""
     settings = Settings(
         workspace=tmp_path / "ws",
-        limits=LimitSettings(max_results=2, default_results=1, max_text_chars=100),
+        limits=LimitSettings(
+            max_results=2,
+            default_results=1,
+            max_text_chars=100,
+            max_search_text_chars=110,
+        ),
     )
     app = create_app(settings, Workspace(settings.workspace))
     catalog = app.state.catalog
@@ -76,6 +81,17 @@ def test_limit_is_capped_by_settings(client: TestClient) -> None:
     """Requested limits above max_results are clamped."""
     response = client.post("/api/v1/search", json={"query": "usart_isr", "limit": 50})
     assert len(response.json()["results"]) == 2
+
+
+def test_search_text_budget_is_aggregate_and_reported(client: TestClient) -> None:
+    """The aggregate text budget caps results and reports context truncation."""
+    response = client.post("/api/v1/search", json={"query": "usart_isr", "limit": 2})
+
+    data = response.json()
+    assert data["context_truncated"] is True
+    assert len(data["results"]) == 2
+    assert sum(len(result["text"]) for result in data["results"]) <= 110
+    assert data["results"][-1]["truncated"] is True
 
 
 def test_filters_are_applied(client: TestClient) -> None:

@@ -65,12 +65,33 @@ def _find_heading(lines: list[_Line], start: int, page: int, title: str) -> tupl
             return None
         one = _norm(lines[index].text)
         if one == wanted:
-            return index, 1
-        if index + 1 < len(lines) and lines[index + 1].page == page:
-            if _norm(f"{lines[index].text} {lines[index + 1].text}") == wanted:
-                return index, 2
-        if len(one) >= _MIN_PARTIAL_HEADING and wanted.startswith(one) and one != wanted:
-            return index, 1
+            count = 1
+        elif (
+            index + 1 < len(lines)
+            and lines[index + 1].page == page
+            and _norm(f"{lines[index].text} {lines[index + 1].text}") == wanted
+        ):
+            count = 2
+        elif len(one) >= _MIN_PARTIAL_HEADING and wanted.startswith(one) and one != wanted:
+            count = 1
+        else:
+            continue
+        prefix = lines[index - 1].text.strip() if index > start else ""
+        if (
+            index > start
+            and lines[index - 1].page == page
+            and (index < 2 or lines[index - 2].page != page)
+            and (
+                prefix.isdecimal()
+                or (
+                    len(prefix) == 1
+                    and "A" <= prefix <= "Z"
+                    and re.match(rf"appendix {prefix.lower()}\b", wanted) is not None
+                )
+            )
+        ):
+            return index - 1, count + 1
+        return index, count
     return None
 
 

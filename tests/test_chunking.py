@@ -57,6 +57,65 @@ def test_heading_split_over_two_lines_is_found() -> None:
     assert chunk.text == "body line"
 
 
+def test_heading_number_at_page_start_is_not_assigned_to_previous_section() -> None:
+    """Keep a page-leading chapter number with the heading that follows it."""
+    document = _doc(
+        [
+            "Previous heading\nPrevious body",
+            "5\nSpecific constraints of MCUs\nwithout memory abstraction\nNew body",
+        ],
+        [
+            (1, "Previous heading", "Previous heading", 1, 2),
+            (
+                1,
+                "Specific constraints of MCUs without memory abstraction",
+                "Specific constraints of MCUs without memory abstraction",
+                2,
+                2,
+            ),
+        ],
+    )
+    chunks = chunk_document("ds", document, SETTINGS).chunks
+    assert [(chunk.section_id, chunk.text, chunk.page) for chunk in chunks] == [
+        ("s0000", "Previous body", 1),
+        ("s0001", "New body", 2),
+    ]
+
+
+def test_number_before_heading_inside_page_remains_previous_content() -> None:
+    """Do not treat ordinary numeric content inside a page as a heading number."""
+    document = _doc(
+        ["Previous heading\nPrevious body\n5\nNew heading\nNew body"],
+        [
+            (1, "Previous heading", "Previous heading", 1, 1),
+            (1, "New heading", "New heading", 1, 1),
+        ],
+    )
+    chunks = chunk_document("ds", document, SETTINGS).chunks
+    assert [(chunk.section_id, chunk.text) for chunk in chunks] == [
+        ("s0000", "Previous body\n5"),
+        ("s0001", "New body"),
+    ]
+
+
+@pytest.mark.parametrize(("label", "is_heading"), [("A", True), ("B", False)])
+def test_page_leading_appendix_label_matches_outline(label: str, is_heading: bool) -> None:
+    """Treat an appendix letter as a heading only when it matches the outline."""
+    document = _doc(
+        ["Previous heading\nPrevious body", f"{label}\nAppendix A - Details\nNew body"],
+        [
+            (1, "Previous heading", "Previous heading", 1, 2),
+            (1, "Appendix A - Details", "Appendix A - Details", 2, 2),
+        ],
+    )
+    chunks = chunk_document("ds", document, SETTINGS).chunks
+    expected = [("s0000", "Previous body", 1)]
+    if not is_heading:
+        expected.append(("s0000", label, 2))
+    expected.append(("s0001", "New body", 2))
+    assert [(chunk.section_id, chunk.text, chunk.page) for chunk in chunks] == expected
+
+
 def test_missing_heading_falls_back_to_page_start() -> None:
     """When the heading is not in the text, the section starts at its page."""
     document = _doc(["p1 text", "p2 text"], [(1, "Ghost", "Ghost", 2, 2)])

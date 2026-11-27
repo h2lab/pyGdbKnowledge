@@ -4,7 +4,8 @@
 # Pilot evaluation questions for `silicore-knowledge evaluate`.
 # Each question lists the evidence a correct answer needs; `document` is matched against the
 # document id, title and device, `contains` against the chunk text (case-insensitive).
-# Categories: register, bitfield, address, dma, timing, hardware, cross, intent.
+# Categories describe the domain under evaluation (register, bitfield, hardware, intent,
+# security, architecture, development, language, assembly, protocol and peripheral).
 # Gap: only one errata sheet (ES0182, STM32F407) in the pilot corpus.
 
 questions:
@@ -166,3 +167,75 @@ questions:
     category: intent
     query: extend the battery life of the application
     expect: [{contains: ["stop mode"]}, {contains: ["standby"]}, {contains: ["low-power"]}]
+
+  # --- V1 corpus enrichment: security and architecture guides ---
+  - id: h2lab-jtag-security
+    category: security
+    query: JTAG debug access protect debug interface
+    expect:
+      - document: H2Lab STIG JTAG-001
+        contains: [debug authentication]
+  - id: h2lab-phy-architecture
+    category: architecture
+    query: PHY attack surface hardware security
+    expect:
+      - document: H2Lab STIG PHY-001
+        contains: [T02 extraction]
+  - id: h2lab-embedded-development
+    category: development
+    query: secure development process tests coverage embedded firmware
+    expect:
+      - document: H2Lab STIG EMDEV-001
+        contains: [input bounds]
+  - id: h2lab-secure-update
+    category: security
+    query: secure maintenance firmware update
+    expect:
+      - document: H2Lab STIG MAJ-001
+        contains: [A/B update state machine]
+
+  # --- V1 corpus enrichment: language and assembly references ---
+  - id: c11-atomics
+    category: language
+    query: N1570 C11 stdatomic.h atomic_compare_exchange_explicit memory_order
+    expect:
+      - document: C11 Committee Draft N1570
+        contains: [atomic_compare_exchange]
+  - id: python-pep257
+    category: language
+    query: Python PEP 257 docstring conventions
+    expect:
+      - document: PEP 257
+        contains: [docstring]
+  - id: arm-thumb2-instructions
+    category: assembly
+    query: Thumb-2 instruction set assembly reference manual
+    expect:
+      - document: Thumb-2 Supplement Reference Manual
+        contains: [Thumb-2]
+
+  # --- V1 corpus enrichment: protocols and component datasheets ---
+  - id: i2c-clock-stretching
+    category: protocol
+    query: I2C bus fast mode timing clock stretching specification
+    expect:
+      - document: UM10204
+        contains: [clock stretching]
+  - id: tmp102-i2c-register
+    category: peripheral
+    query: TMP102 temperature register I2C conversion rate
+    expect:
+      - document: TMP102
+        contains: [conversion rates]
+  - id: ads7042-spi
+    category: peripheral
+    query: ADS7042 SPI serial peripheral interface sample rate
+    expect:
+      - document: ADS7042
+        contains: [12-bit]
+  - id: artix7-fpga-datasheet
+    category: fpga
+    query: Artix 7 FPGA eFUSE programming conditions
+    expect:
+      - document: Artix-7 FPGAs Data Sheet
+        contains: [eFUSE]

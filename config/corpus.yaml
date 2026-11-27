@@ -12,8 +12,15 @@
 # Only these hosts may be contacted, redirects included. HTTPS only.
 allowed_domains:
   - api.github.com
+  - blog.h2lab.org
+  - class.ece.iastate.edu
+  - docs.amd.com
+  - pep257.readthedocs.io
   - raw.githubusercontent.com
+  - web.cs.dal.ca
+  - www.nxp.com
   - www.st.com
+  - www.ti.com
   - www.arm.com
   - frama-c.com
 request_delay_s: 1.0
@@ -97,7 +104,89 @@ sources:
         document_type: specification
         keywords: [acsl, frama-c, formal methods, verification, function contract, c]
 
-  # To widen the corpus (secure coding guides, language standards, RFCs, protocol
-  # specifications, ...), add `urls` sources with direct PDF links and list every new host in
-  # `allowed_domains`. HTML-only resources (Zephyr docs, Rust book, IEEE/USB portal pages, ...)
-  # cannot be ingested yet; see TODO.md (V2 web indexing / HTML extraction).
+  # H2Lab security, architecture and embedded-development guides.
+  - name: h2lab-guides
+    kind: urls
+    source_type: official
+    documents:
+      - url: https://blog.h2lab.org/doc/h2lab-stig-jtag-001-en.pdf
+        title: H2Lab STIG JTAG-001
+        document_type: security-guide
+        keywords: [jtag, swd, debug interface, secure debug]
+      - url: https://blog.h2lab.org/doc/h2lab-stig-phy-001-en.pdf
+        title: H2Lab STIG PHY-001
+        document_type: technical-guide
+        keywords: [phy, physical layer, hardware interface]
+      - url: https://blog.h2lab.org/doc/h2lab-stig-emdev-001-en.pdf
+        title: H2Lab STIG EMDEV-001
+        document_type: technical-guide
+        keywords: [embedded development, secure development, software]
+      - url: https://blog.h2lab.org/doc/h2lab-stig-maj-001-en.pdf
+        title: H2Lab STIG MAJ-001
+        document_type: security-guide
+        keywords: [software update, firmware update, security, maintenance]
+
+  # Language references. PEP 257 is classified as an RFC-like proposal, as requested.
+  - name: language-references
+    kind: urls
+    source_type: community
+    documents:
+      - url: https://web.cs.dal.ca/~vlado/pl/C_Standard_2011-n1570.pdf
+        title: C11 Committee Draft N1570
+        revision: N1570
+        document_type: standard
+        keywords: [c, c11, language standard, syntax, semantics, atomics]
+      - url: https://pep257.readthedocs.io/_/downloads/en/0.7.0/pdf/
+        title: PEP 257 Docstring Conventions
+        revision: PEP 257
+        document_type: rfc
+        keywords: [python, pep 257, docstrings, conventions, documentation]
+
+  - name: arm-thumb2-reference
+    kind: urls
+    source_type: community
+    documents:
+      - url: https://class.ece.iastate.edu/cpre288/resources/docs/Thumb-2SupplementReferenceManual.pdf
+        title: Thumb-2 Supplement Reference Manual
+        document_type: programming-manual
+        keywords: [arm, thumb-2, cortex-m, instruction set, assembler, assembly]
+
+  - name: i2c-specification
+    kind: urls
+    source_type: official
+    manufacturer: NXP Semiconductors
+    documents:
+      - url: https://www.nxp.com/docs/en/user-guide/UM10204.pdf
+        title: UM10204 I2C-bus specification and user manual
+        document_type: protocol-specification
+        keywords: [i2c, i2c-bus, two-wire serial, fast-mode, timing, protocol]
+
+  - name: ti-components
+    kind: urls
+    source_type: official
+    manufacturer: Texas Instruments
+    documents:
+      - url: https://www.ti.com/lit/ds/symlink/tmp102.pdf
+        title: TMP102 Low-Power Digital Temperature Sensor with I2C Interface
+        device: TMP102
+        document_type: datasheet
+        keywords: [temperature sensor, i2c, register map, conversion, alert]
+      - url: https://www.ti.com/lit/ds/symlink/ads7042.pdf
+        title: ADS7042 12-Bit Low-Power SAR ADC
+        device: ADS7042
+        document_type: datasheet
+        keywords: [adc, analog-to-digital converter, spi, serial interface, sampling]
+
+  - name: amd-fpga
+    kind: urls
+    source_type: official
+    manufacturer: AMD
+    documents:
+      - url: https://docs.amd.com/api/khub/documents/iAkxxTOk96ANLJqYf2hgrQ/content
+        title: Artix-7 FPGAs Data Sheet
+        device_family: Artix-7
+        document_type: datasheet
+        keywords: [fpga, artix-7, logic resources, I/O, switching characteristics]
+
+  # V1 ingests PDF and SVD only. HTML/Markdown sources (including Rust RFC pages) remain out
+  # of scope until web/document extraction is implemented.

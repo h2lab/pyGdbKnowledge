@@ -1,6 +1,13 @@
 {
  "version": 1,
  "hashes": {
+  "https://blog.h2lab.org/doc/h2lab-stig-emdev-001-en.pdf": "6dcdc653fcc1e6293da7505f1fd4a5ab67fedd87dad3910c811a426e82972198",
+  "https://blog.h2lab.org/doc/h2lab-stig-jtag-001-en.pdf": "59788cbfbf175d1a7d9a43b86df3360b5213c2679b6353f208780142640ff039",
+  "https://blog.h2lab.org/doc/h2lab-stig-maj-001-en.pdf": "093082c0fb3205688a8037e59fc1f3c3c9a75eb9ab0d0d11510f0e206e92e104",
+  "https://blog.h2lab.org/doc/h2lab-stig-phy-001-en.pdf": "a2ba1339515d94be68257cda7a1595aa0cc4ec5913468adb424a6eb173a06818",
+  "https://class.ece.iastate.edu/cpre288/resources/docs/Thumb-2SupplementReferenceManual.pdf": "78702fe98380ed4c4ace6f9704aaa47e45897b6fa43ff705ac2d1ea3041d87c2",
+  "https://docs.amd.com/api/khub/documents/iAkxxTOk96ANLJqYf2hgrQ/content": "3f0cb482d645e217ae834e9370c1320300abb85a8046287250f9a48856aed070",
+  "https://pep257.readthedocs.io/_/downloads/en/0.7.0/pdf/": "efc431fec9dd5891950ea5aef63ec1b8ec9a329fc3baa01ff0a6cb1999efc891",
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32F401.svd": "7cbcddfc76b0d8c022a999ad39a5b464147aa3ad69130b8350b4f315979c3d80",
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32F405.svd": "261c70ebbeb17bc982abc7d3c8e257b78e5a89457ddf2d9655bf2f2502f95134",
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32F407.svd": "e2afca4f03f654225886d8508551cb7ac8f3c95ee28f18953aad466ecb56e6d6",
@@ -22,6 +29,8 @@
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32U5A9.svd": "de1c7afeffee7ef9fa187cc46f274d9f52cb9c04d9a8b68c4441eccbea804cc3",
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32U5Fx.svd": "11f5f1c8af4ab3465bcd18e4f600b83006a057394463c6fac58943ccff26b551",
   "https://raw.githubusercontent.com/cmsis-svd/cmsis-svd-data/c65f8551e57c770344d229dcaa0bf838fa29aff4/data/STMicro/STM32U5Gx.svd": "b021540badec6e5e6082e0a28bc1cd9c2c9652162d9a074de22b9c97e1fa576e",
+  "https://web.cs.dal.ca/~vlado/pl/C_Standard_2011-n1570.pdf": "208969fec021e4f4ce87a1873765298c73e7bbb5209b1c5868967c7adfc8492e",
+  "https://www.nxp.com/docs/en/user-guide/UM10204.pdf": "dc91f00f65584e06ef36e26c93bf9d91a95fb3c8a1830a9223e53caf678b36af",
   "https://www.st.com/resource/en/application_note/an4488-getting-started-with-stm32f4xxxx-mcu-hardware-development-stmicroelectronics.pdf": "7704a013f43fc4b5d85e4e91548bc7a578570d8f35dc9b5fada24655768d7655",
   "https://www.st.com/resource/en/application_note/an5373-getting-started-with-stm32u5-mcu-hardware-development-stmicroelectronics.pdf": "03d7110a104179d6ced7633ff3ed56d3445045181943c2df651d1c9dc4daa4b1",
   "https://www.st.com/resource/en/datasheet/stm32f407vg.pdf": "1f41b4fa49a9960215ebb76cd0a75f20241db82eed60d308345a80463caeed22",
@@ -30,6 +39,8 @@
   "https://www.st.com/resource/en/datasheet/stm32u595ai.pdf": "1a6951f7fcbc7a72653a9610dbfc26e6ef45b0d0847be7b28cdc327abbd3051f",
   "https://www.st.com/resource/en/datasheet/stm32u5a5zj.pdf": "62f035250fb393509554739e3b4e23d49321a4fcfbfb39fd3d33e99a3ac23760",
   "https://www.st.com/resource/en/datasheet/stm32u5a9bj.pdf": "62f035250fb393509554739e3b4e23d49321a4fcfbfb39fd3d33e99a3ac23760",
-  "https://www.st.com/resource/en/errata_sheet/es0182-stm32f405407xx-and-stm32f415417xx-device-errata-stmicroelectronics.pdf": "1d3da0f99b85013548d17df07919516bf862f8f38cbd1a61f08e75abb8e4c54f"
+  "https://www.st.com/resource/en/errata_sheet/es0182-stm32f405407xx-and-stm32f415417xx-device-errata-stmicroelectronics.pdf": "1d3da0f99b85013548d17df07919516bf862f8f38cbd1a61f08e75abb8e4c54f",
+  "https://www.ti.com/lit/ds/symlink/ads7042.pdf": "96d5f335d91126fd3de13a4f0e287a82a9d10a50ab87629da4dcb0b2b9d802e0",
+  "https://www.ti.com/lit/ds/symlink/tmp102.pdf": "c9da6620ef95f75ce94372f670a84d168e05922dd32cebfaa6517083f15ebfaf"
  }
 }

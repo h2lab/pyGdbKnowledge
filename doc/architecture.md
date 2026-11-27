@@ -87,7 +87,9 @@ local file -> validation + SHA-256 + duplicate/version detection
   chunks never cross a page boundary, so each passage's page identifies all of its text;
   structures continuing across pages are consequently split at that boundary. Oversize PDF
   lines are split at spaces where possible, or within a long token when necessary, to keep
-  each passage within the configured chunk size.
+  each passage within the configured chunk size. SVD passages also respect that limit: long
+  descriptions are split at spaces where possible, with register and bit-field context repeated
+  when it fits. An exceptionally long identifier may itself have to be split.
 - Operator-supplied metadata stays null when unknown. PDF peripheral metadata is inferred
   heuristically from section paths, so it may be incorrect; identifiers immediately preceded
   or followed by `macro` or `pragma` are not treated as registers.
@@ -109,6 +111,11 @@ Vector search (natural-language questions), FTS5 (exact names such as `USART_ISR
 addresses), and metadata filters (manufacturer, family, device, peripheral, document type,
 revision) are fused (reciprocal rank fusion) and ranked, with a bonus by source reliability.
 No LLM reranker until retrieval quality has been measured.
+
+When a query contains an identifier and another distinct retained term, an additional lexical
+ranking rewards passages matching all retained terms. It is a bonus rather than a separate
+modality, so it does not lower existing scores. If no passage matches the conjunction, ordinary
+lexical, identifier and vector search remain available.
 
 Controlled query expansion closes the vocabulary gap between a technical intent and the
 documents: `config/concepts.yaml` (set through `retrieval.concepts_path`) declares concepts

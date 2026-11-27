@@ -29,6 +29,7 @@ _MAX_ENUMS = 16
 _FORBIDDEN = (b"<!doctype", b"<!entity")
 _SPACES_RE = re.compile(r"\s+")
 _RANGE_RE = re.compile(r"^\[(\d+):(\d+)\]$")
+_FIELD_CONTEXT_RE = re.compile(r"^\s*Bits\s+\d+(?::\d+)?\s+[^\s:]+(?:\s+\([^)]*\))?")
 
 
 class SvdError(Exception):
@@ -191,6 +192,14 @@ def _pack(blocks: list[list[str]], max_chars: int) -> list[list[str]]:
     current: list[str] = []
     size = 0
     for block in blocks:
+        if len(block[0]) > max_chars or any(
+            len(block[0]) + len(line) + 1 > max_chars for line in block[1:]
+        ):
+            if current:
+                packed.append(current)
+                current, size = [], 0
+            packed.extend(_split_oversized_block(block, max_chars))
+            continue
         pieces = [block]
         if sum(len(line) + 1 for line in block) > max_chars and len(block) > 1:
             head, rest = block[0], block[1:]
@@ -211,7 +220,75 @@ def _pack(blocks: list[list[str]], max_chars: int) -> list[list[str]]:
             size += piece_size
     if current:
         packed.append(current)
-    return packed
+    return [
+        part
+        for piece in packed
+        for part in (
+            _split_oversized_block(piece, max_chars)
+            if len("\n".join(piece)) > max_chars
+            else [piece]
+        )
+    ]
+
+
+def _segment_end(text: str, start: int, limit: int) -> int:
+    end = min(start + limit, len(text))
+    if end < len(text):
+        space = text.rfind(" ", start + 1, end)
+        if space != -1:
+            end = space + 1
+    return end
+
+
+def _split_oversized_block(block: list[str], max_chars: int) -> list[list[str]]:
+    """Split exceptional long lines, retaining register and field context where it fits."""
+    header = block[0]
+    context = header if len(header) <= max_chars // 2 else header.partition(" (")[0]
+    if len(context) > max_chars // 2:
+        context = ""
+    result: list[list[str]] = []
+    current: list[str] = []
+    if len(header) > max_chars:
+        start = 0
+        while start < len(header):
+            base = [context] if start and context else []
+            remaining = max_chars - len("\n".join(base)) - bool(base)
+            end = _segment_end(header, start, remaining)
+            result.append([*base, header[start:end]])
+            start = end
+    else:
+        current = [header]
+
+    for line in block[1:]:
+        if current and len("\n".join(current)) + 1 + len(line) <= max_chars:
+            current.append(line)
+            continue
+        first: list[str] = []
+        if current:
+            if current == [header] and len(header) <= max_chars // 2:
+                first = current
+            else:
+                result.append(current)
+            current = []
+        match = _FIELD_CONTEXT_RE.match(line)
+        field_context = f"{match.group()} (continued)" if match else ""
+        if len(context) + len(field_context) + 1 > max_chars // 2:
+            field_context = ""
+        start = 0
+        while start < len(line):
+            base = first if start == 0 and first else ([context] if context else [])
+            if start > 0 and field_context:
+                base = [*base, field_context]
+            remaining = max_chars - len("\n".join(base)) - bool(base)
+            end = _segment_end(line, start, remaining)
+            current = [*base, line[start:end]]
+            start = end
+            if start < len(line):
+                result.append(current)
+                current = []
+    if current:
+        result.append(current)
+    return result
 
 
 def chunk_svd(document_id: str, path: Path, settings: IngestionSettings) -> ChunkedDocument:

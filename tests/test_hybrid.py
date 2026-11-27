@@ -104,6 +104,14 @@ def test_lexical_only(catalog: Catalog) -> None:
     assert 0.0 < hits[1].score < hits[0].score <= 1.0
 
 
+def test_identifier_with_unmatched_terms_preserves_existing_results(catalog: Catalog) -> None:
+    """If no passage matches every term, identifier and lexical retrieval still work."""
+    searcher = HybridSearcher(catalog)
+    assert searcher.search("usart_isr nonexistent", SearchFilters(), 5) == searcher.search(
+        "usart_isr", SearchFilters(), 5
+    )
+
+
 def test_source_reliability_breaks_ties(catalog: Catalog, store: InMemoryVectorStore) -> None:
     """Official and community chunks ranked equally: official wins, with full score."""
     searcher = HybridSearcher(catalog, StubEmbedder((1.0, 0.0)), store)

@@ -18,7 +18,7 @@ from silicore_knowledge.ingestion.pipeline import Indexer
 from silicore_knowledge.ingestion.svd import SvdError, chunk_svd
 from silicore_knowledge.retrieval.hybrid import HybridSearcher
 from silicore_knowledge.storage.catalog import Catalog
-from silicore_knowledge.storage.models import SearchFilters, SourceType
+from silicore_knowledge.storage.models import Document, SearchFilters, SourceType
 from silicore_knowledge.workspace import Area, Workspace
 
 SVD = """<?xml version="1.0" encoding="utf-8"?>
@@ -122,8 +122,91 @@ def test_large_peripheral_is_split_within_the_chunk_limit(tmp_path: Path) -> Non
     settings = IngestionSettings(chunk_max_chars=800, chunk_overlap_chars=0)
     chunks = chunk_svd("big-1", path, settings).chunks
     assert len(chunks) > 3
-    assert all(len(c.text) <= 800 + 200 for c in chunks)
+    assert all(len(c.text) <= settings.chunk_max_chars for c in chunks)
     assert len({c.chunk_id for c in chunks}) == len(chunks)
+
+
+@pytest.mark.parametrize("limit", [200, 1500])
+def test_oversized_bitfield_keeps_register_context_and_all_words(
+    tmp_path: Path, limit: int
+) -> None:
+    """Long field descriptions are bounded without losing words or their register context."""
+    words = [f"word{i:04}" for i in range(400)]
+    field = (
+        "<field><name>TCEM</name><bitOffset>30</bitOffset><bitWidth>2</bitWidth>"
+        f"<description>{' '.join(words)}</description></field>"
+    )
+    path = tmp_path / "long-field.svd"
+    path.write_text(SVD.replace("<fields>", f"<fields>{field}", 1), encoding="utf-8")
+    settings = IngestionSettings(chunk_max_chars=limit, chunk_overlap_chars=0)
+    chunked = chunk_svd("dev-1", path, settings)
+    assert all(len(chunk.text) <= limit for chunk in chunked.chunks)
+    matching = [
+        chunk for chunk in chunked.chunks if "word" in chunk.text and chunk.peripheral == "USART1"
+    ]
+    assert len(matching) > 1
+    assert all(
+        "Register USART1_CR1" in chunk.text and "Bits 31:30 TCEM" in chunk.text
+        for chunk in matching
+    )
+    assert [word for chunk in matching for word in chunk.text.split() if word in words] == words
+    assert chunk_svd("dev-1", path, settings) == chunked
+    catalog = Catalog(tmp_path / "c.db")
+    catalog.add_document(
+        Document(
+            document_id="dev-1",
+            title="STM32TEST",
+            content_hash="a" * 64,
+            source_type=SourceType.VENDOR,
+        )
+    )
+    catalog.replace_content("dev-1", list(chunked.sections), list(chunked.chunks))
+    hits = HybridSearcher(catalog).search(
+        "USART1_CR1 word0399", SearchFilters(peripheral="USART1"), 5
+    )
+    assert any("word0399" in hit.chunk.text and "Bits 31:30 TCEM" in hit.chunk.text for hit in hits)
+
+
+@pytest.mark.parametrize("element", ["peripheral", "register", "field"])
+def test_oversized_svd_line_keeps_unbroken_text(tmp_path: Path, element: str) -> None:
+    """Very long descriptions are split even when they have no word boundaries."""
+    marker = "Z" * 800
+    snippets = {
+        "peripheral": "<description>Universal   synchronous\n        receiver</description>",
+        "register": "<description>Control register 1</description>",
+        "field": "<description>USART enable</description>",
+    }
+    content = SVD.replace(snippets[element], f"<description>{marker}</description>", 1)
+    path = tmp_path / f"long-{element}.svd"
+    path.write_text(content, encoding="utf-8")
+    settings = IngestionSettings(chunk_max_chars=200, chunk_overlap_chars=0)
+    chunks = chunk_svd("dev-1", path, settings).chunks
+    assert all(len(chunk.text) <= settings.chunk_max_chars for chunk in chunks)
+    # USART2 inherits the USART1 description or registers.
+    for peripheral in ("USART1", "USART2"):
+        assert (
+            sum(chunk.text.count("Z") for chunk in chunks if chunk.peripheral == peripheral) == 800
+        )
+        matching = [
+            chunk for chunk in chunks if chunk.peripheral == peripheral and "Z" in chunk.text
+        ]
+        context = "Peripheral" if element == "peripheral" else f"Register {peripheral}_CR1"
+        assert all(context in chunk.text for chunk in matching)
+
+
+def test_oversized_register_name_does_not_prevent_bounded_chunks(tmp_path: Path) -> None:
+    """An identifier too large to repeat still remains in the bounded output."""
+    path = tmp_path / "long-register-name.svd"
+    path.write_text(
+        SVD.replace("<name>CR1</name>", f"<name>{'Z' * 800}</name>", 1), encoding="utf-8"
+    )
+    settings = IngestionSettings(chunk_max_chars=200, chunk_overlap_chars=0)
+    chunks = chunk_svd("dev-1", path, settings).chunks
+    assert all(len(chunk.text) <= settings.chunk_max_chars for chunk in chunks)
+    for peripheral in ("USART1", "USART2"):
+        assert (
+            sum(chunk.text.count("Z") for chunk in chunks if chunk.peripheral == peripheral) == 800
+        )
 
 
 @pytest.mark.parametrize(

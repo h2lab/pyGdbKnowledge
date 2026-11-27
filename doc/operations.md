@@ -92,8 +92,12 @@ SQLite and Qdrant are derived data: both can be rebuilt from `documents/` alone.
 PDF chunks now stay within individual pages, so older indexes should be rebuilt with
 `reindex` to correct their page citations. Reindexing also applies the size limit to previously
 oversized single-line PDF passages and refreshes inferred peripheral metadata, including
-removing false matches for identifiers immediately adjacent to `macro` or `pragma`. It can
-change chunk IDs and search rankings.
+removing false matches for identifiers immediately adjacent to `macro` or `pragma`. Reindex
+SVD documents as well to apply the chunk size limit to long descriptions. Reindexing can change
+chunk IDs and search rankings.
+
+Identifier queries with additional terms also receive a lexical bonus for passages matching all
+retained terms. This ranking change does not require reindexing.
 
 ## Embedding model versions
 

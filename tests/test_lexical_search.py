@@ -10,9 +10,11 @@ from pydantic import ValidationError
 
 from silicore_knowledge.retrieval.lexical_search import (
     MAX_TERMS,
+    build_conjunctive_identifier_query,
     build_expansion_query,
     build_identifier_query,
     build_match_query,
+    conjunctive_identifier_search,
     lexical_search,
 )
 from silicore_knowledge.storage.catalog import Catalog
@@ -187,6 +189,32 @@ def test_identifier_query_keeps_underscored_names_only() -> None:
         '"flash_acr" OR "rcc_ahb1enr"'
     )
     assert build_identifier_query("wait states") is None
+
+
+def test_conjunctive_identifier_query_is_bounded_and_quoted() -> None:
+    """The extra ranking needs an identifier and another retained term."""
+    assert build_conjunctive_identifier_query('USART_ISR flags"*') == '"usart_isr" AND "flags"'
+    assert build_conjunctive_identifier_query("USART_ISR USART_ISR") is None
+    assert build_conjunctive_identifier_query("USART_ISR register") is None
+    assert build_conjunctive_identifier_query("usart flags") is None
+    assert (
+        build_conjunctive_identifier_query(
+            " ".join(f"term{i}" for i in range(MAX_TERMS)) + " USART_ISR"
+        )
+        is None
+    )
+
+
+def test_conjunctive_identifier_search_enforces_filters_and_quarantine(catalog: Catalog) -> None:
+    """Conjunctive matches use the same active-document restriction and metadata filters."""
+    hits = conjunctive_identifier_search(
+        catalog, "USART_ISR flags", SearchFilters(manufacturer="ST")
+    )
+    assert [hit.document.document_id for hit in hits] == ["st-rm"]
+    assert not conjunctive_identifier_search(
+        catalog, "USART_ISR flags", SearchFilters(manufacturer="NXP")
+    )
+    assert not conjunctive_identifier_search(catalog, "USART_ISR ignore")
 
 
 def test_build_expansion_query_quotes_terms_as_phrases() -> None:

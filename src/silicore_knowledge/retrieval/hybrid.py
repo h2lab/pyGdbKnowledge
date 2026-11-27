@@ -10,7 +10,12 @@ from ..storage.catalog import Catalog
 from ..storage.models import SearchFilters, SearchHit, SourceType
 from .concepts import ConceptRegistry
 from .embeddings import Embedder, EmbeddingError
-from .lexical_search import expansion_search, identifier_search, lexical_search
+from .lexical_search import (
+    conjunctive_identifier_search,
+    expansion_search,
+    identifier_search,
+    lexical_search,
+)
 from .vector_store import VectorStore, VectorStoreError
 
 logger = logging.getLogger("silicore_knowledge")
@@ -98,6 +103,9 @@ class HybridSearcher:
         identifiers = identifier_search(self._catalog, query, filters, candidates)
         if identifiers:
             rankings.append((identifiers, 1.0, True))
+            conjunction = conjunctive_identifier_search(self._catalog, query, filters, candidates)
+            if conjunction:
+                rankings.append((conjunction, 1.0, False))
         expansion = self._expansion_ranking(query, filters, candidates)
         if expansion:
             rankings.append((expansion, EXPANSION_RRF_WEIGHT, False))
@@ -113,9 +121,8 @@ class HybridSearcher:
                 hits[chunk_id] = hit
                 fused[chunk_id] = fused.get(chunk_id, 0.0) + weight / (RRF_K + rank)
 
-        # Expansion is a low-confidence bonus, not another full retrieval modality. Excluding
-        # it from the normalizer prevents an active concept from lowering existing result scores
-        # and unexpectedly filtering them through min_score.
+        # Bonus rankings are not separate modalities: excluding them from the normalizer avoids
+        # lowering existing result scores and unexpectedly filtering them through min_score.
         best_possible = sum(weight for _, weight, normalize in rankings if normalize) / (RRF_K + 1)
         scored = [
             (chunk_id, fused[chunk_id] * self._weights[hits[chunk_id].document.source_type])

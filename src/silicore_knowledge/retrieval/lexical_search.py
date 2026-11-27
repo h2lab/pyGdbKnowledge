@@ -68,6 +68,29 @@ def build_identifier_query(text: str) -> str | None:
     return " OR ".join(f'"{term}"' for term in seen) or None
 
 
+def build_conjunctive_identifier_query(text: str) -> str | None:
+    """Match all retained query terms when one is an identifier and another adds context.
+
+    Parameters
+    ----------
+    text : str
+        User query.
+
+    Returns
+    -------
+    str | None
+        Bounded FTS5 expression, or None when no identifier and context are both retained.
+    """
+    match = build_match_query(text)
+    identifiers = build_identifier_query(text)
+    if match is None or identifiers is None:
+        return None
+    terms = match.split(" OR ")
+    if len(terms) < 2 or not set(terms).intersection(identifiers.split(" OR ")):
+        return None
+    return " AND ".join(terms)
+
+
 def build_expansion_query(terms: Sequence[str]) -> str | None:
     """Turn controlled expansion terms into a safe FTS5 expression.
 
@@ -112,6 +135,16 @@ def identifier_search(
 ) -> list[SearchHit]:
     """Search by the identifier-like terms of ``query`` only; empty when it has none."""
     match = build_identifier_query(query)
+    if match is None:
+        return []
+    return catalog.search_chunks(match, filters or SearchFilters(), limit)
+
+
+def conjunctive_identifier_search(
+    catalog: Catalog, query: str, filters: SearchFilters | None = None, limit: int = 20
+) -> list[SearchHit]:
+    """Rank passages containing an identifier and all other retained query terms."""
+    match = build_conjunctive_identifier_query(query)
     if match is None:
         return []
     return catalog.search_chunks(match, filters or SearchFilters(), limit)

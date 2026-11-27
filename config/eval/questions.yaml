@@ -79,6 +79,11 @@ questions:
     query: GPDMA1 channel control register
     filters: {device: STM32U595}
     expect: [{peripheral: GPDMA1}]
+  - id: u595-gpdma-tcem
+    category: dma
+    query: GPDMA1_GPDMA_C0TR2 TCEM
+    filters: {device: STM32U595, peripheral: GPDMA1}
+    expect: [{contains: ["GPDMA1_GPDMA_C0TR2", "TCEM", "Transfer complete event mode"]}]
   - id: f4-datasheet-dma
     category: dma
     query: number of DMA streams and FIFOs

@@ -3,14 +3,15 @@
 
 """Split extracted documents into sections and retrievable chunks.
 
-Chunks never cross a section boundary and carry their section path and page. Bit-field
+Chunks never cross a section or page boundary and carry their section path and page. Bit-field
 descriptions (``Bits 7:4 NAME: ...``) and table-like runs of short lines are kept whole when
-they fit, because splitting them makes register documentation unusable.
+they fit on a page, because splitting them makes register documentation unusable.
 """
 
 import hashlib
 import re
 from dataclasses import dataclass
+from itertools import groupby
 
 from ..config import IngestionSettings
 from ..storage.models import Chunk, Section
@@ -276,7 +277,13 @@ def chunk_document(
             )
         )
         peripheral = infer_peripheral(extracted.path)
-        packed = _pack(_blocks(lines), settings.chunk_max_chars, settings.chunk_overlap_chars)
+        packed = [
+            part
+            for _, page_lines in groupby(lines, key=lambda line: line.page)
+            for part in _pack(
+                _blocks(list(page_lines)), settings.chunk_max_chars, settings.chunk_overlap_chars
+            )
+        ]
         for index, chunk_lines in enumerate(packed):
             text = "\n".join(line.text.strip() for line in chunk_lines)
             chunks.append(

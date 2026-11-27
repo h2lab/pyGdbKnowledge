@@ -89,6 +89,8 @@ verification vocabulary without broadening other lifecycle-security queries.
 - `silicore-knowledge delete ID... [--source-url-prefix P]` removes files, index and vectors.
 
 SQLite and Qdrant are derived data: both can be rebuilt from `documents/` alone.
+PDF chunks now stay within individual pages, so older indexes should be rebuilt with
+`reindex` to correct their page citations. Reindexing can change chunk IDs and search rankings.
 
 ## Embedding model versions
 

@@ -83,7 +83,9 @@ local file -> validation + SHA-256 + duplicate/version detection
   recorded in `corpus.lock.json` on first download (trust on first use). Files then follow the
   normal import path (screening, audit trail with channel `sync`).
 - Chunking follows document structure (sections, registers and bit fields, tables), keeps
-  section path, page and peripheral context, limits overlap, and uses stable chunk ids.
+  section path, page and peripheral context, limits overlap, and uses stable chunk ids. PDF
+  chunks never cross a page boundary, so each passage's page identifies all of its text;
+  structures continuing across pages are consequently split at that boundary.
 - Unknown metadata stays null; values are never invented.
 - Operator-supplied `keywords` (manifest entries, CLI `--keyword`, admin API) are stored on the
   document and indexed with its passages, so a query can reach a document whose body uses

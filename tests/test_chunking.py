@@ -16,7 +16,7 @@ from silicore_knowledge.ingestion.extract import (
     ExtractedSection,
 )
 from silicore_knowledge.storage.catalog import Catalog
-from silicore_knowledge.storage.models import Document, SourceType
+from silicore_knowledge.storage.models import Document, SearchFilters, SourceType
 
 SETTINGS = IngestionSettings(chunk_max_chars=300, chunk_overlap_chars=60)
 
@@ -40,10 +40,11 @@ def test_sections_split_at_headings_within_a_page() -> None:
         [(1, "1 First", "1 First", 1, 1), (1, "2 Second", "2 Second", 1, 2)],
     )
     result = chunk_document("ds", document, SETTINGS)
-    texts = {c.section_id: c.text for c in result.chunks}
-    assert texts == {"s0000": "alpha text", "s0001": "beta text\nmore beta"}
-    assert "Cover" not in "".join(texts.values())
-    assert [c.page for c in result.chunks] == [1, 1]
+    assert [(c.section_id, c.text, c.page) for c in result.chunks] == [
+        ("s0000", "alpha text", 1),
+        ("s0001", "beta text", 1),
+        ("s0001", "more beta", 2),
+    ]
 
 
 def test_heading_split_over_two_lines_is_found() -> None:
@@ -101,6 +102,30 @@ def test_chunks_respect_size_and_overlap_for_prose() -> None:
     first, second = chunks[0].text.splitlines(), chunks[1].text.splitlines()
     assert first[-1] == second[0]
     assert len(first[-1]) <= 60
+
+
+def test_chunks_preserve_pages_and_do_not_overlap_across_page_boundaries(tmp_path: Path) -> None:
+    """A search hit cites the page that actually contains its text."""
+    first_page = "\n".join(f"First page line {i:02} " + "x" * 40 for i in range(8))
+    second_page = "\n".join(f"Second page line {i:02} " + "y" * 40 for i in range(5))
+    document = _doc([first_page, second_page], [(1, "P", "P", 1, 2)])
+    result = chunk_document("ds", document, SETTINGS)
+    first = [chunk for chunk in result.chunks if chunk.page == 1]
+    second = [chunk for chunk in result.chunks if chunk.page == 2]
+    assert len(first) > 1 and second
+    assert first[0].text.splitlines()[-1] == first[1].text.splitlines()[0]
+    assert all("Second page" not in chunk.text for chunk in first)
+    assert all("First page" not in chunk.text for chunk in second)
+
+    catalog = Catalog(tmp_path / "c.db")
+    catalog.add_document(
+        Document(
+            document_id="ds", title="T", content_hash="a" * 64, source_type=SourceType.OFFICIAL
+        )
+    )
+    catalog.replace_content("ds", list(result.sections), list(result.chunks))
+    hits = catalog.search_chunks('"second"', SearchFilters(), 5)
+    assert hits and all(hit.chunk.page == 2 for hit in hits)
 
 
 def test_ids_are_stable_and_valid_for_the_catalog(tmp_path: Path) -> None:

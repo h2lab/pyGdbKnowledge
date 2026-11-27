@@ -114,8 +114,15 @@ and `qdrant` volumes.
 ## Quality evaluation
 
 `silicore-knowledge evaluate config/eval/questions.yaml [--verbose] [--min-recall 0.9]` reports
-Recall@k and MRR per question category on the indexed corpus. Run it after any change to
+Recall@k per question category and overall MRR on the indexed corpus. Run it after any change to
 chunking, ranking or the embedding model, and add questions when the corpus grows.
+Recall@k is the fraction of questions with at least one matching expected passage in the top k;
+each `expect` entry is an alternative, not a separate required passage.
+
+Use `--min-category-recall 0.8` to fail when any category falls below that Recall@5 threshold;
+it can be combined with `--min-recall`, which checks the overall score. An empty question set
+fails the category gate. Interpret category scores in light of their question counts and ensure
+the benchmark corpus contains the documents required by the questions.
 
 ## Security notes
 

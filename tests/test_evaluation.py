@@ -99,3 +99,47 @@ def test_command(
     out = capsys.readouterr().out
     assert "wrong-page" in out and "R@5=" in out and "MRR=" in out
     assert cli.main(["evaluate", str(questions), "--config", str(config), "--min-recall", "1"]) == 1
+
+
+def test_category_threshold_detects_failure_hidden_by_global_recall(
+    env: tuple[Settings, Workspace, Catalog],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A category regression fails even when overall recall meets its threshold."""
+    config = tmp_path / "s.yaml"
+    config.write_text(yaml.safe_dump({"workspace": str(tmp_path / "ws")}), encoding="utf-8")
+    questions = write(tmp_path / "q.yaml", QUESTIONS)
+    args = ["evaluate", str(questions), "--config", str(config), "--min-recall", "0.6"]
+    assert cli.main([*args, "--min-category-recall", "0.5"]) == 0
+    assert cli.main([*args, "--min-category-recall", "0.75"]) == 1
+    error = capsys.readouterr().err
+    assert "category 'general'" in error
+    assert "Recall@5=0.5" in error
+    assert "category 'register'" not in error
+
+
+@pytest.mark.parametrize("threshold", ["-0.1", "1.1", "nan", "inf", "not-a-number"])
+def test_invalid_category_threshold_is_rejected(threshold: str) -> None:
+    """Category thresholds must be finite values in the unit interval."""
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["evaluate", "questions.yaml", "--min-category-recall", threshold])
+    assert exc.value.code == 2
+
+
+def test_category_threshold_rejects_empty_question_set(
+    env: tuple[Settings, Workspace, Catalog],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No categories cannot satisfy a category-based quality gate."""
+    config = tmp_path / "s.yaml"
+    config.write_text(yaml.safe_dump({"workspace": str(tmp_path / "ws")}), encoding="utf-8")
+    questions = write(tmp_path / "q.yaml", [])
+    assert (
+        cli.main(
+            ["evaluate", str(questions), "--config", str(config), "--min-category-recall", "0"]
+        )
+        == 1
+    )
+    assert "no categories" in capsys.readouterr().err

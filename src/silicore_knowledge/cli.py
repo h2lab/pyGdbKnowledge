@@ -33,6 +33,18 @@ _CONFIG_HELP = (
 )
 
 
+def _recall_threshold(value: str) -> float:
+    try:
+        threshold = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            "recall threshold must be a number between 0 and 1"
+        ) from None
+    if not 0 <= threshold <= 1:
+        raise argparse.ArgumentTypeError("recall threshold must be a number between 0 and 1")
+    return threshold
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="silicore-knowledge",
@@ -110,6 +122,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     evaluation.add_argument("questions", type=Path, metavar="QUESTIONS_YAML")
     evaluation.add_argument("--min-recall", type=float, help="exit 1 below this Recall@5 (0-1)")
+    evaluation.add_argument(
+        "--min-category-recall",
+        type=_recall_threshold,
+        metavar="THRESHOLD",
+        help="exit 1 if any category's Recall@5 is below this threshold (0-1)",
+    )
     evaluation.add_argument("--verbose", action="store_true", help="list every question")
     evaluation.add_argument("--config", type=Path, help=_CONFIG_HELP)
     return parser
@@ -340,9 +358,21 @@ def _evaluate(args: argparse.Namespace) -> int:
         recalls = " ".join(f"R@{k}={report.recall(k, category):.2f}" for k in report.ks)
         print(f"{label:<12} {recalls}")
     print(f"questions={len(report.results)} MRR={report.mrr:.3f}")
-    if args.min_recall is not None and report.recall(5) < args.min_recall:
-        return 1
-    return 0
+    failed = args.min_recall is not None and report.recall(5) < args.min_recall
+    if args.min_category_recall is not None:
+        if not report.categories:
+            print("silicore-knowledge: no categories to evaluate", file=sys.stderr)
+            return 1
+        for category in report.categories:
+            recall = report.recall(5, category)
+            if recall < args.min_category_recall:
+                print(
+                    f"silicore-knowledge: category {category!r}: Recall@5={recall!r} "
+                    f"is below {args.min_category_recall!r}",
+                    file=sys.stderr,
+                )
+                failed = True
+    return 1 if failed else 0
 
 
 def _serve(config: Path | None) -> int:

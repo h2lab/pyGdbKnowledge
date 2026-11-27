@@ -16,7 +16,7 @@ from silicore_knowledge.ingestion.importer import DocumentMetadata, import_docum
 from silicore_knowledge.ingestion.pipeline import Indexer
 from silicore_knowledge.retrieval.hybrid import HybridSearcher
 from silicore_knowledge.storage.catalog import Catalog
-from silicore_knowledge.storage.models import SourceType
+from silicore_knowledge.storage.models import Chunk, Document, SearchHit, SourceType
 from silicore_knowledge.workspace import Workspace
 
 QUESTIONS = [
@@ -70,6 +70,41 @@ def test_metrics_and_criteria(env: tuple[Settings, Workspace, Catalog], tmp_path
     assert report.recall(1, "register") == 1.0
     assert report.recall(10) == pytest.approx(2 / 3)
     assert report.mrr == pytest.approx((1 + 1 / ranks["alternative"]) / 3)  # type: ignore[operator]
+
+
+@pytest.mark.parametrize(
+    ("title", "peripheral", "text", "relevant"),
+    [
+        ("STM32U595 SVD", "RCC", "RCC_APB2ENR: USART1EN clock enable", True),
+        ("STM32U595 SVD", "SEC_RCC", "RCC_APB2ENR: USART1EN clock enable", True),
+        ("STM32U595xx datasheet", None, "RCC_APB2ENR: USART1EN clock enable", True),
+        ("STM32U595 SVD", "RCC", "USART1SEL: USART1 clock source selection", False),
+        ("STM32U595xx datasheet", None, "General device information", False),
+        ("STM32F407 SVD", "RCC", "RCC_APB2ENR: USART1EN clock enable", False),
+    ],
+)
+def test_u5_clock_question_requires_clock_enable_evidence(
+    title: str, peripheral: str | None, text: str, relevant: bool
+) -> None:
+    """Clock selection or an unrelated U5 passage does not prove clock enablement."""
+    questions = load_questions(Path(__file__).parent.parent / "config" / "eval" / "questions.yaml")
+    question = next(q for q in questions if q.id == "cross-u5-rcc")
+    document = Document(
+        document_id=title.lower().replace(" ", "-"),
+        title=title,
+        content_hash="a" * 64,
+        source_type=SourceType.VENDOR,
+    )
+    chunk = Chunk(
+        chunk_id="example:c0",
+        document_id=document.document_id,
+        ordinal=0,
+        text=text,
+        content_hash="b" * 64,
+        peripheral=peripheral,
+    )
+    hit = SearchHit(chunk=chunk, document=document, score=1.0)
+    assert any(expectation.matches(hit) for expectation in question.expect) is relevant
 
 
 @pytest.mark.parametrize(

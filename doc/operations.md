@@ -140,7 +140,9 @@ individual ranks as well as overall and category metrics. Confirm that vectors c
 chunks and check for semantic-search fallback warnings: a fallback measures lexical search, not
 hybrid retrieval. Model, corpus and filter choices can improve some queries while degrading others.
 An expected hit matches the listed criteria, not every relevant passage; inspect the results
-before interpreting a changed rank as a change in answer quality.
+before interpreting a changed rank as a change in answer quality. When expectation criteria
+change, evaluate both versions on the same corpus: score changes may reflect corrected evidence
+rather than a change in the retriever.
 
 ## Security notes
 

@@ -149,7 +149,7 @@ questions:
   - id: cross-u5-rcc
     category: cross
     query: how to enable the USART1 peripheral clock on STM32U5
-    expect: [{peripheral: RCC, document: u5}, {document: u595xx-datasheet}]
+    expect: [{document: u5, contains: ["APB2ENR", "USART1EN"]}]
 
   # --- technical intent (exercises the concept registry and query expansion) ---
   # These queries avoid the vocabulary of the documents on purpose: without expansion they

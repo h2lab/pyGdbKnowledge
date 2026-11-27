@@ -79,14 +79,6 @@ def search(
     query = body.query[: limits.max_query_chars]
     limit = min(body.limit or limits.default_results, limits.max_results)
     hits = searcher.search(query, body.filters, limit, limits.min_score)
-    # The query itself may be sensitive: only its size and a short digest are recorded.
-    audit_logger.info(
-        "event=search request_id=%s query_len=%d query_sha=%s returned=%s",
-        getattr(request.state, "request_id", "-"),
-        len(query),
-        hashlib.sha256(query.encode()).hexdigest()[:12],
-        ",".join(hit.chunk.chunk_id for hit in hits),
-    )
     results: list[SearchResult] = []
     remaining_text_chars = limits.max_search_text_chars
     context_truncated = False
@@ -120,4 +112,12 @@ def search(
             )
         )
         remaining_text_chars -= len(text)
+    # The query itself may be sensitive: only its size and a short digest are recorded.
+    audit_logger.info(
+        "event=search request_id=%s query_len=%d query_sha=%s returned=%s",
+        getattr(request.state, "request_id", "-"),
+        len(query),
+        hashlib.sha256(query.encode()).hexdigest()[:12],
+        ",".join(result.chunk_id for result in results),
+    )
     return SearchResponse(results=results, context_truncated=context_truncated)

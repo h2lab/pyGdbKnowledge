@@ -147,7 +147,8 @@ curl -s -X POST $URL/api/v1/search \
 - `limit`: bounded by `limits.max_results`.
 - Passage text is bounded by `limits.max_text_chars` per result and
   `limits.max_search_text_chars` across the response. When the aggregate budget cuts a passage
-  or omits lower-ranked results, `context_truncated` is `true`.
+  or omits lower-ranked results, `context_truncated` is `true`; otherwise the field is omitted.
+  The search audit event records the IDs actually returned, excluding omitted results.
 - `filters` (all optional, exact and case-insensitive): `manufacturer`, `device_family`,
   `device`, `peripheral`, `document_type` (list). Other keys are rejected.
 

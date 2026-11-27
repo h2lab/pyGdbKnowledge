@@ -3,6 +3,7 @@
 
 """Tests for the search endpoint."""
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ LONG_TEXT = "usart_isr " + "x" * 300
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> TestClient:
+def client(tmp_path: Path, request: pytest.FixtureRequest) -> TestClient:
     """Client over a one-document catalog with small limits."""
     settings = Settings(
         workspace=tmp_path / "ws",
@@ -25,7 +26,7 @@ def client(tmp_path: Path) -> TestClient:
             max_results=2,
             default_results=1,
             max_text_chars=100,
-            max_search_text_chars=110,
+            max_search_text_chars=getattr(request, "param", 110),
         ),
     )
     app = create_app(settings, Workspace(settings.workspace))
@@ -90,8 +91,38 @@ def test_search_text_budget_is_aggregate_and_reported(client: TestClient) -> Non
     data = response.json()
     assert data["context_truncated"] is True
     assert len(data["results"]) == 2
-    assert sum(len(result["text"]) for result in data["results"]) <= 110
+    assert sum(len(result["text"]) for result in data["results"]) == 110
     assert data["results"][-1]["truncated"] is True
+
+
+@pytest.mark.parametrize("client", [1], indirect=True)
+def test_budget_omits_later_hits_and_audits_only_returned_ids(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Audit records the response, not candidates omitted by the text budget."""
+    with caplog.at_level(logging.INFO, logger="silicore_knowledge.audit"):
+        response = client.post("/api/v1/search", json={"query": "usart_isr", "limit": 2})
+
+    data = response.json()
+    assert data["context_truncated"] is True
+    (result,) = data["results"]
+    assert len(result["text"]) == 1
+    assert result["truncated"] is True
+    assert result["document_id"] == "ds-1"
+    assert result["section"] == "P > S"
+    search_record = next(record for record in caplog.records if "event=search" in record.message)
+    assert search_record.getMessage().split("returned=", 1)[1] == result["chunk_id"]
+
+
+@pytest.mark.parametrize("client", [115], indirect=True)
+def test_exact_budget_does_not_report_aggregate_truncation(client: TestClient) -> None:
+    """Fitting all returned text exactly does not imply aggregate truncation."""
+    data = client.post("/api/v1/search", json={"query": "usart_isr", "limit": 2}).json()
+    assert sum(len(result["text"]) for result in data["results"]) == 115
+    assert len(data["results"]) == 2
+    assert data["results"][0]["truncated"] is True
+    assert data["results"][1]["truncated"] is False
+    assert "context_truncated" not in data
 
 
 def test_filters_are_applied(client: TestClient) -> None:

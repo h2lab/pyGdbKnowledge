@@ -5,9 +5,7 @@
 
 import asyncio
 import logging
-import re
 import sys
-import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -19,18 +17,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__
 from .api import admin, documents, health, search
 from .api.auth import require_admin, require_read
-from .config import Settings
+from .config import ConfigError, Settings
 from .ingestion.pipeline import Indexer
 from .ingestion.tasks import TaskRegistry
 from .retrieval.hybrid import HybridSearcher
-from .security import RateLimiter
+from .security import REQUEST_ID_HEADER, RateLimiter, RequestBodyLimit, request_id
 from .services import build_runtime
 from .storage.catalog import Catalog
 from .workspace import Workspace
 
 API_PREFIX = "/api/v1"
-REQUEST_ID_HEADER = "X-Request-ID"
-_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 logger = logging.getLogger("silicore_knowledge")
 
@@ -75,6 +71,8 @@ def create_app(
     FastAPI
         Application exposing the versioned API under ``/api/v1``.
     """
+    if settings.limits.min_score <= 0:
+        raise ConfigError("limits.min_score must be positive to serve; calibrate it on the corpus")
     app = FastAPI(
         title="Silicore Knowledge",
         version=__version__,
@@ -82,6 +80,7 @@ def create_app(
         redoc_url=None,
         openapi_url=f"{API_PREFIX}/openapi.json",
     )
+    app.add_middleware(RequestBodyLimit, max_bytes=settings.limits.max_api_body_bytes)
     app.state.settings = settings
     app.state.workspace = workspace
     app.state.catalog = Catalog(workspace.catalog_path)
@@ -105,8 +104,8 @@ def create_app(
     ) -> Response:
         """Attach a correlation id, throttle clients and bound the processing time."""
         supplied = request.headers.get(REQUEST_ID_HEADER, "")
-        request_id = supplied if _REQUEST_ID_RE.fullmatch(supplied) else uuid.uuid4().hex
-        request.state.request_id = request_id
+        correlation = request_id(supplied)
+        request.state.request_id = correlation
         response: Response
         client = request.client.host if request.client else "-"
         retry_after = None if request.url.path == f"{API_PREFIX}/health" else limiter.check(client)
@@ -117,10 +116,10 @@ def create_app(
                 response = await asyncio.wait_for(call_next(request), timeout_s)
             except TimeoutError:
                 response = error(504, "request timed out", request)
-        response.headers[REQUEST_ID_HEADER] = request_id
+        response.headers[REQUEST_ID_HEADER] = correlation
         logger.info(
             "request_id=%s method=%s path=%s status=%d",
-            request_id,
+            correlation,
             request.method,
             request.url.path,
             response.status_code,

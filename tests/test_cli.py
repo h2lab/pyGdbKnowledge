@@ -26,7 +26,8 @@ def test_serve_runs_uvicorn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     """Command serve builds the app from the configuration and starts uvicorn."""
     config = tmp_path / "s.yaml"
     config.write_text(
-        f"workspace: {tmp_path / 'ws'}\nserver:\n  host: 127.0.0.1\n  port: 9123\n",
+        f"workspace: {tmp_path / 'ws'}\nserver:\n  host: 127.0.0.1\n  port: 9123\n"
+        "limits:\n  min_score: 0.01\n",
         encoding="utf-8",
     )
     calls: list[dict[str, object]] = []

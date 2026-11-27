@@ -7,13 +7,14 @@ import hashlib
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import Settings
 from ..retrieval.hybrid import HybridSearcher
 from ..security import audit_logger
-from ..storage.models import SHA256_PATTERN, SearchFilters, SourceType
+from ..storage.models import SHA256_PATTERN, ScopedSearchFilters, SearchFilters, SourceType
+from .auth import Principal, require_read
 from .deps import get_settings
 
 router = APIRouter()
@@ -76,12 +77,18 @@ def search(
     body: SearchRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     searcher: Annotated[HybridSearcher, Depends(get_searcher)],
+    principal: Annotated[Principal, Depends(require_read)],
 ) -> SearchResponse:
     """Search the knowledge base with exact and semantic matching."""
     limits = settings.limits
-    query = body.query[: limits.max_query_chars]
+    if len(body.query) > limits.max_query_chars:
+        raise HTTPException(status_code=422, detail="query exceeds the configured length limit")
+    query = body.query
     limit = min(body.limit or limits.default_results, limits.max_results)
-    hits = searcher.search(query, body.filters, limit, limits.min_score)
+    filters = ScopedSearchFilters(
+        **body.filters.model_dump(), allowed_document_ids=principal.allowed_document_ids
+    )
+    hits = searcher.search(query, filters, limit, limits.min_score)
     results: list[SearchResult] = []
     remaining_text_chars = limits.max_search_text_chars
     context_truncated = False
@@ -118,8 +125,12 @@ def search(
         remaining_text_chars -= len(text)
     # The query itself may be sensitive: only its size and a short digest are recorded.
     audit_logger.info(
-        "event=search request_id=%s query_len=%d query_sha=%s returned=%s",
+        "event=search request_id=%s identity=%s scope=%r filters=%r "
+        "query_len=%d query_sha=%s returned=%s",
         getattr(request.state, "request_id", "-"),
+        principal.name,
+        principal.allowed_document_ids,
+        body.filters.model_dump(exclude_none=True, exclude_defaults=True),
         len(query),
         hashlib.sha256(query.encode()).hexdigest()[:12],
         ",".join(result.chunk_id for result in results),

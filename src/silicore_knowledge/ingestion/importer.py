@@ -102,8 +102,8 @@ def import_document(
     """Copy a PDF or SVD file into the workspace and register it in the catalog.
 
     The content is streamed to ``tmp/`` under a size cap while its SHA-256 is computed, checked
-    for a PDF or SVD signature, then moved to ``documents/<sha256>.<pdf|svd>`` (mode 0600). A
-    file whose hash is already known is not stored again. Text extraction is a separate step.
+    for a PDF or SVD signature, then moved to ``quarantine/<sha256>.<pdf|svd>`` (mode 0600).
+    A file whose hash is already known is not stored again. Text extraction is a separate step.
 
     Parameters
     ----------
@@ -186,7 +186,7 @@ def import_document(
                 title=title,
                 content_hash=sha256,
                 source_type=metadata.source_type,
-                status=DocumentStatus.ACTIVE,
+                status=DocumentStatus.QUARANTINED,
                 manufacturer=metadata.manufacturer,
                 device_family=metadata.device_family,
                 device=metadata.device,
@@ -197,7 +197,7 @@ def import_document(
             )
         except ValidationError as exc:
             raise IngestError(f"invalid metadata: {exc.errors()[0]['loc']}") from exc
-        target = workspace.document_path(sha256, suffix=suffix)
+        target = workspace.document_path(sha256, Area.QUARANTINE, suffix=suffix)
         tmp_path.chmod(0o600)
         os.replace(tmp_path, target)
         try:

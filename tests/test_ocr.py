@@ -104,8 +104,8 @@ def test_scanned_pdf_is_ocred_when_enabled(tmp_path: Path, monkeypatch: pytest.M
 
     monkeypatch.setattr(pipeline, "ocr_pdf", fake_ocr)
     indexer, doc_id, workspace = _indexer(tmp_path, scanned, enabled=True)
-    assert indexer.index_document(doc_id).chunks >= 1
-    assert len(calls) == 1
+    assert indexer.release(doc_id).chunks >= 1
+    assert len(calls) == 2
     assert not list(workspace.area(pipeline.Area.TMP).iterdir())
 
 
@@ -113,7 +113,7 @@ def test_scanned_pdf_without_ocr_is_an_error(tmp_path: Path) -> None:
     """Without OCR, a document with no text is reported instead of silently empty."""
     indexer, doc_id, _ = _indexer(tmp_path, make_pdf(tmp_path / "scan.pdf", [""]), enabled=False)
     with pytest.raises(IndexingError, match="no extractable text"):
-        indexer.index_document(doc_id)
+        indexer.release(doc_id)
 
 
 def test_text_pdf_skips_ocr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,4 +126,4 @@ def test_text_pdf_skips_ocr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     text = "SPI_CR1 register description with plenty of readable words " * 2
     pdf = make_pdf(tmp_path / "t.pdf", [text], [[1, "A", 1]])
     indexer, doc_id, _ = _indexer(tmp_path, pdf, enabled=True)
-    assert indexer.index_document(doc_id).chunks >= 1
+    assert indexer.release(doc_id).chunks >= 1

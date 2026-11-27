@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from .. import __version__
 from ..storage.catalog import Catalog
 from ..storage.models import CatalogStats
+from .auth import Principal, Role, require_read
 from .deps import get_catalog
 
 router = APIRouter()
@@ -37,6 +38,9 @@ def health() -> HealthResponse:
 
 
 @stats_router.get("/stats", response_model=CatalogStats)
-def stats(catalog: Annotated[Catalog, Depends(get_catalog)]) -> CatalogStats:
+def stats(
+    catalog: Annotated[Catalog, Depends(get_catalog)],
+    principal: Annotated[Principal, Depends(require_read)],
+) -> CatalogStats:
     """Return catalog counters (schema version, documents, sections, chunks)."""
-    return catalog.stats()
+    return catalog.stats(principal.allowed_document_ids, active_only=principal.role is Role.READ)

@@ -246,9 +246,10 @@ def test_cli_sync(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     args = cli._parser().parse_args(  # noqa: SLF001
         ["sync", "--manifest", str(manifest), "--config", str(config), "--source", "svd", "--index"]
     )
-    assert cli._sync(args, env.fetcher) == 0  # noqa: SLF001
-    out = capsys.readouterr().out
-    assert "sync: 2 imported" in out
+    assert cli._sync(args, env.fetcher) == 1  # noqa: SLF001
+    captured = capsys.readouterr()
+    assert "sync: 2 imported" in captured.out
+    assert "quarantined pending review" in captured.err
     assert (tmp_path / "corpus.lock.json").exists()
     unknown = cli._parser().parse_args(  # noqa: SLF001
         ["sync", "--manifest", str(manifest), "--config", str(config), "--source", "nope"]

@@ -102,6 +102,12 @@ class SearchFilters(_Model):
     )
 
 
+class ScopedSearchFilters(SearchFilters):
+    """Server-supplied document scope; never accepted from a search request."""
+
+    allowed_document_ids: tuple[str, ...] | None
+
+
 class SearchHit(_Model):
     """A retrieved chunk with its document and a relevance score (higher is better)."""
 

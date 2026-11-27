@@ -42,16 +42,17 @@ exact search.
 ## Daemon and workspace
 
 The service runs as an unprivileged daemon with a persistent workspace, separate from code and
-configuration. Original PDFs are plain files; SQLite and Qdrant are derived indexes that can
-be rebuilt from them.
+configuration. Preserve the catalog, original files, quarantine and corpus lock; the search
+indexes can be rebuilt from the stored documents and their catalog metadata.
 
 ```text
 <workspace>/
-├── documents/      original PDFs (named by hash)
+├── documents/      active original PDFs and SVD files (named by hash)
 ├── extracted/      extracted text and pages (cache)
 ├── quarantine/     untrusted documents awaiting validation
 ├── qdrant/         Qdrant storage if embedded
 ├── catalog.db      SQLite: catalog + FTS5
+├── corpus.lock.json  mutable lock for the Compose workflow
 └── tmp/            uploads in progress
 ```
 
@@ -62,7 +63,8 @@ volume, configuration from file and environment, and logs on stdout.
 ## Ingestion pipeline
 
 ```text
-local file -> validation + SHA-256 + duplicate/version detection
+local file -> validation + SHA-256 + duplicate/version detection -> quarantine
+           -> administrative review and explicit release
            -> extraction (text, pages, titles, tables; OCR if text is insufficient)
            -> cleaning, normalization, content checks, metadata
            -> technical chunking
@@ -81,7 +83,11 @@ local file -> validation + SHA-256 + duplicate/version detection
   Downloads are HTTPS-only, limited to the manifest's allowed domains on every redirect hop,
   size-capped, throttled and verified against the manifest SHA-256 or, failing that, the hash
   recorded in `corpus.lock.json` on first download (trust on first use). Files then follow the
-  normal import path (screening, audit trail with channel `sync`).
+  normal quarantine path (audit trail with channel `sync`).
+- Every newly imported PDF or SVD is quarantined regardless of source class. An administrator
+  reviews it and releases it explicitly; `screen` identifies a limited set of injection signals
+  but is not a substitute for review. Existing active documents are not automatically
+  re-quarantined during migration and have no newly established validation record.
 - Chunking follows document structure (sections, registers and bit fields, tables), keeps
   section path, page and peripheral context, limits overlap, and uses stable chunk ids. PDF
   chunks never cross a page boundary, so each passage's page identifies all of its text;
@@ -150,6 +156,8 @@ Source reliability: A official documentation, B official vendor support/forum, C
 | GET | `/api/v1/documents/{id}/sections` | Available sections |
 | GET | `/api/v1/documents/{id}/section/{section_id}` | Detailed section |
 | POST | `/api/v1/admin/ingest` | Ingestion (admin only) |
+| POST | `/api/v1/admin/documents/{id}/screen` | Screen quarantined content (admin only) |
+| POST | `/api/v1/admin/documents/{id}/release` | Approve and queue indexing (admin only) |
 | POST | `/api/v1/web/search` | Web search (later phase) |
 
 Search request: `query`, optional `filters` (`manufacturer`, `device`, `peripheral`,
@@ -167,8 +175,12 @@ Requirements follow the ANSSI guide on securing RAG systems (see
 - PDF and web content is untrusted data, never instructions. Results are returned as data with
   provenance; the consumer must delimit them.
 - Read-only API for agent tools; ingestion and administration use a separate credential.
+- Named readers have distinct credentials and explicit server-side document grants; the grants
+  apply before lexical and vector candidate limits and are rechecked against the catalog.
+  Anonymous reads are disabled. Direct document and section reads use the same policy.
 - Server-side control of collections and filters; strict parameter validation; limits on
-  result count and size; minimum relevance threshold.
+  result count and size. Serving requires a positive relevance threshold calibrated for the
+  deployed model and corpus; the zero default is only usable for offline evaluation.
 - Rate limits, quotas, timeouts.
 - Untrusted sources go to quarantine before indexing; every document lifecycle event is
   traced; documents can be removed quickly together with all derived data.
@@ -195,4 +207,6 @@ starts the service and Qdrant:
 - Healthchecks: `GET /api/v1/health` for the service, a TCP probe for Qdrant.
 
 Administration commands run in the same container, for example
-`docker compose exec knowledge silicore-knowledge audit`.
+`docker compose exec knowledge silicore-knowledge audit`. See the
+[Compose workflow](operations.md#docker-compose-document-and-corpus-workflow) for bootstrapping,
+quarantine review, corpus updates and persistent lock management.

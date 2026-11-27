@@ -9,12 +9,18 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from silicore_knowledge.config import LimitSettings, Settings
+from pydantic import SecretStr
+
+from silicore_knowledge.config import AuthSettings, LimitSettings, ReadPrincipal, Settings
 from silicore_knowledge.main import create_app
 from silicore_knowledge.storage.models import Chunk, Document, Section, SourceType
 from silicore_knowledge.workspace import Workspace
 
 LONG_TEXT = "usart_isr " + "x" * 300
+AUTH = AuthSettings(
+    principals={"reader": ReadPrincipal(token=SecretStr("read-token"), allowed_documents=("*",))}
+)
+HEADERS = {"Authorization": "Bearer read-token"}
 
 
 @pytest.fixture
@@ -22,11 +28,13 @@ def client(tmp_path: Path, request: pytest.FixtureRequest) -> TestClient:
     """Client over a one-document catalog with small limits."""
     settings = Settings(
         workspace=tmp_path / "ws",
+        auth=AUTH,
         limits=LimitSettings(
             max_results=2,
             default_results=1,
             max_text_chars=100,
             max_search_text_chars=getattr(request, "param", 110),
+            min_score=0.01,
         ),
     )
     app = create_app(settings, Workspace(settings.workspace))
@@ -58,7 +66,7 @@ def client(tmp_path: Path, request: pytest.FixtureRequest) -> TestClient:
         for i, text in enumerate([LONG_TEXT, "usart_isr again", "usart_isr third"])
     ]
     catalog.replace_content("ds-1", [section], chunks)
-    return TestClient(app)
+    return TestClient(app, headers=HEADERS)
 
 
 def test_search_returns_documented_fields(client: TestClient) -> None:
@@ -83,7 +91,7 @@ def test_search_returns_documented_fields(client: TestClient) -> None:
 
 def test_search_hash_belongs_to_each_result_document(tmp_path: Path) -> None:
     """Multiple hits retain their own source hash, not the passage hash."""
-    settings = Settings(workspace=tmp_path / "ws")
+    settings = Settings(workspace=tmp_path / "ws", auth=AUTH, limits=LimitSettings(min_score=0.01))
     app = create_app(settings, Workspace(settings.workspace))
     for document_id, digest in (("one", "a" * 64), ("two", "c" * 64)):
         app.state.catalog.add_document(
@@ -107,7 +115,7 @@ def test_search_hash_belongs_to_each_result_document(tmp_path: Path) -> None:
                 )
             ],
         )
-    client = TestClient(app)
+    client = TestClient(app, headers=HEADERS)
     results = client.post("/api/v1/search", json={"query": "common", "limit": 2}).json()["results"]
     assert {result["document_id"]: result["document_sha256"] for result in results} == {
         "one": "a" * 64,

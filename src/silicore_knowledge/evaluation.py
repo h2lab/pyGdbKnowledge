@@ -10,15 +10,24 @@ text). A hit is relevant when it satisfies every criterion of at least one expec
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Annotated, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 from .retrieval.hybrid import HybridSearcher
 from .storage.models import SearchFilters, SearchHit
 
 DEFAULT_KS = (1, 3, 5, 10)
 _MAX_K = 100
+_Criterion = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 
 
 class EvaluationError(Exception):
@@ -32,12 +41,19 @@ class _Model(BaseModel):
 class Expectation(_Model):
     """Evidence criteria; every given criterion must match (case-insensitive substrings)."""
 
-    document: str | None = None
-    peripheral: str | None = None
-    section: str | None = None
+    document: _Criterion | None = None
+    peripheral: _Criterion | None = None
+    section: _Criterion | None = None
     page: int | None = Field(default=None, ge=1)
     page_tolerance: int = Field(default=0, ge=0)
-    contains: tuple[str, ...] = ()
+    contains: tuple[_Criterion, ...] = Field(default=(), max_length=16)
+    not_contains: tuple[_Criterion, ...] = Field(default=(), max_length=16)
+
+    @model_validator(mode="after")
+    def _has_positive_criterion(self) -> Self:
+        if not (self.document or self.peripheral or self.section or self.page or self.contains):
+            raise ValueError("an expectation must contain a positive criterion")
+        return self
 
     def matches(self, hit: SearchHit) -> bool:
         """Return whether ``hit`` satisfies every criterion."""
@@ -57,7 +73,9 @@ class Expectation(_Model):
         ):
             return False
         text = chunk.text.lower()
-        return all(needle.lower() in text for needle in self.contains)
+        return all(needle.lower() in text for needle in self.contains) and all(
+            needle.lower() not in text for needle in self.not_contains
+        )
 
 
 class Question(_Model):
@@ -68,6 +86,7 @@ class Question(_Model):
     query: str = Field(min_length=1, max_length=500)
     filters: SearchFilters = SearchFilters()
     expect: tuple[Expectation, ...] = Field(min_length=1)
+    forbid: tuple[Expectation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +95,7 @@ class QuestionResult:
 
     question: Question
     rank: int | None
+    forbidden_ranks: tuple[int, ...] = ()
 
 
 @dataclass(slots=True)
@@ -103,6 +123,10 @@ class EvaluationReport:
     def categories(self) -> list[str]:
         """Question categories, sorted."""
         return sorted({r.question.category for r in self.results})
+
+    def forbidden(self, k: int) -> int:
+        """Count questions with at least one explicitly forbidden hit within the top k."""
+        return sum(any(rank <= k for rank in result.forbidden_ranks) for result in self.results)
 
 
 def load_questions(path: Path) -> list[Question]:
@@ -132,6 +156,7 @@ def evaluate(
     searcher: HybridSearcher,
     questions: Sequence[Question],
     ks: tuple[int, ...] = DEFAULT_KS,
+    min_score: float = 0.0,
 ) -> EvaluationReport:
     """Run every question and locate the first relevant hit.
 
@@ -143,6 +168,8 @@ def evaluate(
         Questions to run.
     ks : tuple[int, ...]
         Cut-offs reported; the largest one is the number of hits requested.
+    min_score : float
+        Minimum score applied by the searcher.
 
     Returns
     -------
@@ -152,14 +179,20 @@ def evaluate(
     depth = min(max(ks), _MAX_K)
     report = EvaluationReport(ks=ks)
     for question in questions:
-        hits = searcher.search(question.query, question.filters, depth)
+        hits = searcher.search(question.query, question.filters, depth, min_score)
+        forbidden_ranks = tuple(
+            index
+            for index, hit in enumerate(hits, start=1)
+            if any(expectation.matches(hit) for expectation in question.forbid)
+        )
         rank = next(
             (
                 index
                 for index, hit in enumerate(hits, start=1)
-                if any(expectation.matches(hit) for expectation in question.expect)
+                if index not in forbidden_ranks
+                and any(expectation.matches(hit) for expectation in question.expect)
             ),
             None,
         )
-        report.results.append(QuestionResult(question, rank))
+        report.results.append(QuestionResult(question, rank, forbidden_ranks))
     return report

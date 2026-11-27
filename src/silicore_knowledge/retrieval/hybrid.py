@@ -172,5 +172,5 @@ class HybridSearcher:
             logger.warning("semantic search unavailable, using lexical only: %s", exc)
             return None
         # The vector index may be stale: only chunks of active documents survive.
-        loaded = self._catalog.get_hits([hit.chunk_id for hit in vector_hits])
+        loaded = self._catalog.get_hits([hit.chunk_id for hit in vector_hits], filters)
         return [loaded[hit.chunk_id] for hit in vector_hits if hit.chunk_id in loaded]

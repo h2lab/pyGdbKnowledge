@@ -90,14 +90,15 @@ def test_suspicious_content_is_quarantined_then_released(env: Env) -> None:
     assert quarantined is not None and quarantined.status is DocumentStatus.QUARANTINED
     assert held.is_file() and not live.exists()
     assert env.hits() == 0 and env.store.count() == 0 and env.catalog.chunk_count(doc_id) == 0
-    with pytest.raises(IndexingError, match="not active"):
+    assert "instruction_override" in env.indexer.inspect(doc_id)
+    with pytest.raises(IndexingError, match="quarantined"):
         env.indexer.index_document(doc_id)
 
     env.indexer.release(doc_id)
     assert live.is_file() and not held.exists()
     assert env.hits() == 1
     events = [e.event for e in env.catalog.list_events(doc_id)]
-    assert events == ["imported", "quarantined", "released", "indexed"]
+    assert events == ["imported", "released", "indexed"]
     with pytest.raises(IndexingError, match="not quarantined"):
         env.indexer.release(doc_id)
 
@@ -105,17 +106,31 @@ def test_suspicious_content_is_quarantined_then_released(env: Env) -> None:
 def test_benign_content_is_indexed(env: Env) -> None:
     """Normal technical wording passes screening."""
     doc_id = env.add("ok", BENIGN)
-    env.indexer.index_document(doc_id)
+    assert env.indexer.inspect(doc_id) == ()
+    env.indexer.release(doc_id)
     assert env.hits() == 1
+
+
+def test_changed_quarantined_file_cannot_be_released(env: Env) -> None:
+    """A review cannot release bytes different from the imported hash."""
+    doc_id = env.add("tampered", BENIGN)
+    document = env.catalog.get_document(doc_id)
+    assert document is not None
+    held = env.workspace.document_path(document.content_hash, Area.QUARANTINE)
+    held.write_bytes(held.read_bytes() + b"changed")
+    with pytest.raises(IndexingError, match="has changed"):
+        env.indexer.release(doc_id)
+    assert env.catalog.get_document(doc_id).status is DocumentStatus.QUARANTINED
+    assert env.hits() == 0 and env.store.count() == 0
 
 
 def test_audit_trail_survives_deletion_and_holds_no_content(env: Env) -> None:
     """Lifecycle events outlive the document and record provenance, not text."""
     doc_id = env.add("ds", BENIGN, url="https://example.com/ds.pdf")
-    env.indexer.index_document(doc_id)
+    env.indexer.release(doc_id)
     env.indexer.delete_document(doc_id)
     events = env.catalog.list_events(doc_id)
-    assert [e.event for e in events] == ["imported", "indexed", "deleted"]
+    assert [e.event for e in events] == ["imported", "released", "indexed", "deleted"]
     first = events[0]
     assert first.source_url == "https://example.com/ds.pdf" and first.channel == "cli"
     assert first.source_type == "community" and first.content_hash
@@ -127,7 +142,8 @@ def test_removal_leaves_nothing_retrievable(env: Env) -> None:
     """After deletion, no channel returns the document: files, FTS, vectors, API reads."""
     keep = env.add("keep", "SPI_CR1 register")
     gone = env.add("gone", BENIGN)
-    env.indexer.index_documents()
+    env.indexer.release(keep)
+    env.indexer.release(gone)
     assert env.hits() == 2 and env.store.count() == 2
     document = env.catalog.get_document(gone)
     assert document is not None
@@ -147,7 +163,8 @@ def test_batch_removal_by_source_url(env: Env) -> None:
     a = env.add("a", "alpha register", url="https://forum.example.org/a")
     b = env.add("b", "beta register", url="https://forum.example.org/b")
     c = env.add("c", "gamma register", url="https://vendor.example.com/c")
-    env.indexer.index_documents()
+    for doc_id in (a, b, c):
+        env.indexer.release(doc_id)
     targets = env.indexer.find_by_source_url("https://forum.example.org/")
     assert sorted(targets) == sorted([a, b])
     report = env.indexer.delete_documents([*targets, "nope-00000000"])
@@ -169,10 +186,12 @@ def test_cli_quarantine_release_audit_and_batch_delete(
     captured = capsys.readouterr()
     assert "quarantined" in captured.err
     doc_id = captured.out.split("imported: ")[1].split()[0]
+    assert cli.main(["screen", *base, doc_id]) == 0
+    assert "instruction_override" in capsys.readouterr().out
     assert cli.main(["release", *base, doc_id]) == 0
     assert "released:" in capsys.readouterr().out
     assert cli.main(["audit", *base, doc_id]) == 0
-    assert "quarantined" in capsys.readouterr().out
+    assert "released" in capsys.readouterr().out
     assert cli.main(["delete", *base]) == 2
     assert cli.main(["delete", *base, "--source-url-prefix", "https://x.org/"]) == 0
     assert f"deleted: {doc_id}" in capsys.readouterr().out

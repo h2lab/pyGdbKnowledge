@@ -3,8 +3,8 @@
 
 # Example configuration. Every key can be overridden with an environment variable
 # SILICORE_KNOWLEDGE__<SECTION>__<KEY>, e.g. SILICORE_KNOWLEDGE__SERVER__PORT=9000.
-# Keep tokens out of this file: set SILICORE_KNOWLEDGE__AUTH__READ_TOKEN and
-# SILICORE_KNOWLEDGE__AUTH__ADMIN_TOKEN in the environment (distinct values).
+# Keep tokens out of this file. Configure named read principals and the admin token
+# through environment variables; see doc/operations.md.
 
 workspace: /var/lib/silicore-knowledge
 log_level: INFO
@@ -47,7 +47,8 @@ limits:
   max_text_chars: 4000
   max_search_text_chars: 32000
   max_query_chars: 500
-  min_score: 0.0
+  min_score: 0.0            # serving requires a positive value calibrated on the corpus
   request_timeout_s: 20
   rate_limit_per_minute: 120
   max_upload_bytes: 209715200
+  max_api_body_bytes: 65536   # non-upload request bodies, enforced before JSON parsing

@@ -17,7 +17,7 @@ def test_defaults_without_file() -> None:
     settings = load_settings(environ={})
     assert settings == Settings()
     assert settings.server.host == "127.0.0.1"
-    assert settings.auth.read_token is None
+    assert not settings.auth.principals
 
 
 def test_shipped_example_is_valid() -> None:
@@ -33,11 +33,13 @@ def test_environment_overrides_file(tmp_path: Path) -> None:
         path,
         environ={
             "SILICORE_KNOWLEDGE__SERVER__PORT": "9100",
-            "SILICORE_KNOWLEDGE__AUTH__READ_TOKEN": "a-read-token",
+            "SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__READER__TOKEN": "a-read-token",
+            "SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__READER__ALLOWED_DOCUMENTS": '["ds-1"]',
         },
     )
     assert settings.server.port == 9100
     assert settings.server.host == "0.0.0.0"
+    assert settings.auth.principals["reader"].allowed_documents == ("ds-1",)
 
 
 def test_config_path_from_environment(tmp_path: Path) -> None:
@@ -74,17 +76,37 @@ def test_missing_file_and_bad_yaml(tmp_path: Path) -> None:
 def test_identical_tokens_rejected_without_leaking() -> None:
     """Read and admin tokens must differ; the error never echoes secrets."""
     env = {
-        "SILICORE_KNOWLEDGE__AUTH__READ_TOKEN": "s3cret-value",
+        "SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__READER__TOKEN": "s3cret-value",
         "SILICORE_KNOWLEDGE__AUTH__ADMIN_TOKEN": "s3cret-value",
     }
-    with pytest.raises(ConfigError, match="must be different") as info:
+    with pytest.raises(ConfigError, match="different") as info:
         load_settings(environ=env)
     assert "s3cret-value" not in str(info.value)
 
 
+@pytest.mark.parametrize(
+    "env",
+    [
+        {
+            "SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__A__TOKEN": "same",
+            "SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__B__TOKEN": "same",
+        },
+        {"SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__A__TOKEN": ""},
+        {
+            "SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__A__TOKEN": "secret",
+            "SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__A__ALLOWED_DOCUMENTS": '["*", "ds-1"]',
+        },
+    ],
+)
+def test_invalid_identity_configuration_is_refused(env: dict[str, str]) -> None:
+    """Duplicate tokens, empty tokens and ambiguous wildcard grants fail closed."""
+    with pytest.raises(ConfigError):
+        load_settings(environ=env)
+
+
 def test_secrets_are_masked() -> None:
     """Tokens do not appear in repr."""
-    settings = load_settings(environ={"SILICORE_KNOWLEDGE__AUTH__READ_TOKEN": "abc123"})
+    settings = load_settings(environ={"SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__R__TOKEN": "abc123"})
     assert "abc123" not in repr(settings)
 
 

@@ -17,10 +17,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..config import Settings
 from ..ingestion.importer import DocumentMetadata, ImportResult, IngestError, import_pdf
 from ..ingestion.pipeline import Indexer, IndexingError
-from ..ingestion.tasks import TaskInfo, TaskRegistry
+from ..ingestion.tasks import TaskCapacityError, TaskInfo, TaskRegistry
 from ..security import audit_logger
 from ..storage.catalog import Catalog, CatalogError
-from ..storage.models import ID_PATTERN, MAX_KEYWORDS, Keyword, SourceType
+from ..storage.models import ID_PATTERN, MAX_KEYWORDS, DocumentStatus, Keyword, SourceType
 from ..workspace import Area, Workspace
 from .deps import get_catalog, get_settings
 
@@ -65,7 +65,15 @@ class IngestAccepted(BaseModel):
 
     document_id: str
     created: bool
-    task: TaskInfo
+    status: DocumentStatus
+    task: TaskInfo | None
+
+
+class ScreeningResult(BaseModel):
+    """Heuristic findings on a quarantined document."""
+
+    document_id: str
+    rules: tuple[str, ...]
 
 
 def _tasks(request: Request) -> TaskRegistry:
@@ -76,6 +84,13 @@ def _tasks(request: Request) -> TaskRegistry:
 def _workspace(request: Request) -> Workspace:
     workspace: Workspace = request.app.state.workspace
     return workspace
+
+
+def _submit(request: Request, document_id: str, *, release: bool = False) -> TaskInfo:
+    try:
+        return _tasks(request).submit(document_id, release=release)
+    except TaskCapacityError as exc:
+        raise HTTPException(status_code=429, detail="indexing task capacity reached") from exc
 
 
 def _finish(
@@ -94,8 +109,12 @@ def _finish(
         result.created,
         getattr(request.state, "request_id", "-"),
     )
-    task = _tasks(request).submit(document.document_id)
-    return IngestAccepted(document_id=document.document_id, created=result.created, task=task)
+    task = (
+        _submit(request, document.document_id) if document.status is DocumentStatus.ACTIVE else None
+    )
+    return IngestAccepted(
+        document_id=document.document_id, created=result.created, status=document.status, task=task
+    )
 
 
 async def _import(
@@ -125,7 +144,7 @@ async def ingest_upload(
     settings: Annotated[Settings, Depends(get_settings)],
     catalog: Annotated[Catalog, Depends(get_catalog)],
 ) -> IngestAccepted:
-    """Import a PDF sent as the raw request body, then queue its indexing.
+    """Import a PDF sent as the raw request body into quarantine.
 
     Metadata travels in the query string; the body is the PDF itself (streamed to disk and
     bounded by ``limits.max_upload_bytes``).
@@ -177,6 +196,43 @@ async def ingest_path(
         _workspace(request), catalog, source, metadata, settings.limits.max_upload_bytes, "path"
     )
     return _finish(request, "path", result)
+
+
+@router.post("/documents/{document_id}/screen", response_model=ScreeningResult)
+async def screen_document(
+    request: Request,
+    document_id: Annotated[str, PathParam(pattern=ID_PATTERN)],
+) -> ScreeningResult:
+    """Screen a quarantined document for review without releasing it."""
+    indexer: Indexer = request.app.state.indexer
+    try:
+        rules = await run_in_threadpool(indexer.inspect, document_id)
+    except IndexingError as exc:
+        logger.warning("screening failed: %s", exc)
+        raise HTTPException(status_code=422, detail="document cannot be screened") from exc
+    return ScreeningResult(document_id=document_id, rules=rules)
+
+
+@router.post("/documents/{document_id}/release", status_code=202, response_model=TaskInfo)
+def release_document(
+    request: Request,
+    document_id: Annotated[str, PathParam(pattern=ID_PATTERN)],
+) -> TaskInfo:
+    """Approve a reviewed quarantined document and queue indexing."""
+    catalog: Catalog = request.app.state.catalog
+    document = catalog.get_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    if document.status is not DocumentStatus.QUARANTINED:
+        raise HTTPException(status_code=409, detail="document is not quarantined")
+    task = _submit(request, document_id, release=True)
+    audit_logger.info(
+        "event=release_queued request_id=%s task_id=%s document_id=%s",
+        getattr(request.state, "request_id", "-"),
+        task.task_id,
+        document_id,
+    )
+    return task
 
 
 @router.delete("/documents/{document_id}", status_code=204)

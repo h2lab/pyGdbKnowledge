@@ -3,6 +3,7 @@
 
 """Indexing pipeline: PDF or SVD file to sections, chunks, FTS5 entries and vectors."""
 
+import hashlib
 import logging
 import os
 import tempfile
@@ -17,7 +18,7 @@ from ..security import audit_logger
 from ..storage.catalog import Catalog, CatalogError
 from ..storage.models import Chunk, Document, DocumentStatus
 from ..workspace import Area, Workspace, WorkspaceError
-from .chunking import chunk_document
+from .chunking import ChunkedDocument, chunk_document
 from .extract import ExtractedDocument, ExtractionError, extract_pdf
 from .ocr import OcrError, needs_ocr, ocr_pdf
 from .screening import screen_chunks
@@ -114,22 +115,8 @@ class Indexer:
         if document is None:
             raise IndexingError(f"unknown document {document_id!r}")
         if document.status is not DocumentStatus.ACTIVE:
-            raise IndexingError(f"document {document_id!r} is not active")
-        try:
-            path = self._workspace.stored_document(document.content_hash)
-            if path is None:
-                raise IndexingError(f"stored file of {document_id!r} is missing")
-            if path.suffix == ".svd":
-                chunked = chunk_svd(document_id, path, self._settings.ingestion)
-                page_count = None
-            else:
-                extracted = self._extract(path)
-                chunked = chunk_document(document_id, extracted, self._settings.ingestion)
-                page_count = extracted.page_count
-        except (WorkspaceError, ExtractionError, OcrError, SvdError) as exc:
-            raise IndexingError(f"cannot extract {document_id!r}: {exc}") from exc
-        if not chunked.chunks:
-            raise IndexingError(f"no extractable text in {document_id!r} (scanned? enable OCR)")
+            raise IndexingError(f"document {document_id!r} is quarantined pending review")
+        chunked, page_count = self._chunk(document, Area.DOCUMENTS)
         if screen and self._settings.ingestion.quarantine_suspicious:
             findings = screen_chunks(chunked.chunks)
             if findings:
@@ -172,6 +159,26 @@ class Indexer:
             len(vectors),
         )
         return IndexResult(document_id, len(chunked.sections), len(chunked.chunks), len(vectors))
+
+    def _chunk(self, document: Document, area: Area) -> tuple[ChunkedDocument, int | None]:
+        try:
+            path = self._workspace.stored_document(document.content_hash, area)
+            if path is None:
+                raise IndexingError(f"stored file of {document.document_id!r} is missing")
+            if path.suffix == ".svd":
+                chunked = chunk_svd(document.document_id, path, self._settings.ingestion)
+                page_count = None
+            else:
+                extracted = self._extract(path)
+                chunked = chunk_document(document.document_id, extracted, self._settings.ingestion)
+                page_count = extracted.page_count
+        except (WorkspaceError, ExtractionError, OcrError, SvdError) as exc:
+            raise IndexingError(f"cannot extract {document.document_id!r}: {exc}") from exc
+        if not chunked.chunks:
+            raise IndexingError(
+                f"no extractable text in {document.document_id!r} (scanned? enable OCR)"
+            )
+        return chunked, page_count
 
     def _extract(self, path: Path) -> ExtractedDocument:
         extracted = extract_pdf(path, self._settings.ingestion)
@@ -330,6 +337,30 @@ class Indexer:
             if d.source_url is not None and d.source_url.startswith(prefix)
         ]
 
+    def inspect(self, document_id: str) -> tuple[str, ...]:
+        """Screen a quarantined document without making it retrievable.
+
+        Raises
+        ------
+        IndexingError
+            If the document is not quarantined, missing or cannot be extracted.
+        """
+        document = self._catalog.get_document(document_id)
+        if document is None or document.status is not DocumentStatus.QUARANTINED:
+            raise IndexingError(f"document {document_id!r} is not quarantined")
+        try:
+            path = self._workspace.stored_document(document.content_hash, Area.QUARANTINE)
+            if path is None:
+                raise IndexingError(f"quarantined file of {document_id!r} is missing")
+            with path.open("rb") as source:
+                digest = hashlib.file_digest(source, "sha256").hexdigest()
+        except (WorkspaceError, OSError) as exc:
+            raise IndexingError(f"cannot read quarantined file of {document_id!r}: {exc}") from exc
+        if digest != document.content_hash:
+            raise IndexingError(f"quarantined file of {document_id!r} has changed")
+        chunked, _ = self._chunk(document, Area.QUARANTINE)
+        return tuple(sorted({finding.rule for finding in screen_chunks(chunked.chunks)}))
+
     def release(self, document_id: str) -> IndexResult:
         """Release a quarantined document after human review, then index it.
 
@@ -344,18 +375,23 @@ class Indexer:
         document = self._catalog.get_document(document_id)
         if document is None or document.status is not DocumentStatus.QUARANTINED:
             raise IndexingError(f"document {document_id!r} is not quarantined")
+        findings = self.inspect(document_id)
         try:
             held = self._workspace.stored_document(document.content_hash, Area.QUARANTINE)
-            if held is not None:
-                os.replace(
-                    held,
-                    self._workspace.document_path(document.content_hash, suffix=held.suffix),
-                )
+            if held is None:
+                raise IndexingError(f"quarantined file of {document_id!r} is missing")
+            os.replace(
+                held,
+                self._workspace.document_path(document.content_hash, suffix=held.suffix),
+            )
         except (WorkspaceError, OSError) as exc:
             raise IndexingError(f"cannot restore the file of {document_id!r}: {exc}") from exc
         self._catalog.set_status(document_id, DocumentStatus.ACTIVE)
-        self._catalog.record_event("released", document_id, content_hash=document.content_hash)
-        audit_logger.info("event=release document_id=%s", document_id)
+        detail = f"screening_rules={','.join(findings) or 'none'}"
+        self._catalog.record_event(
+            "released", document_id, content_hash=document.content_hash, detail=detail
+        )
+        audit_logger.info("event=release document_id=%s %s", document_id, detail)
         return self.index_document(document_id, screen=False)
 
     def _quarantine(self, document: Document, reason: str) -> None:

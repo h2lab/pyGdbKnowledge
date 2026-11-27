@@ -6,14 +6,21 @@
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 CONFIG_PATH_ENV = "SILICORE_KNOWLEDGE_CONFIG"
 ENV_PREFIX = "SILICORE_KNOWLEDGE__"
-LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
 class ConfigError(Exception):
@@ -52,20 +59,38 @@ class EmbeddingSettings(_Section):
     max_seq_length: int = Field(default=512, ge=16, le=8192)
 
 
-class AuthSettings(_Section):
-    """Bearer tokens; read and admin credentials must differ (ANSSI R21)."""
+class ReadPrincipal(_Section):
+    """A read identity and its explicit document grants."""
 
-    read_token: SecretStr | None = None
+    token: SecretStr = Field(min_length=1)
+    allowed_documents: tuple[
+        Annotated[str, StringConstraints(pattern=r"^(\*|[a-z0-9][a-z0-9._-]{0,127})$")], ...
+    ] = Field(default=(), max_length=500)
+
+    @model_validator(mode="after")
+    def _valid_grants(self) -> Self:
+        if "*" in self.allowed_documents and len(self.allowed_documents) != 1:
+            raise ValueError("the wildcard must be the only document grant")
+        return self
+
+
+class AuthSettings(_Section):
+    """Distinct bearer tokens for named readers and administration."""
+
+    principals: dict[
+        Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,63}$")], ReadPrincipal
+    ] = Field(default_factory=dict)
     admin_token: SecretStr | None = None
 
     @model_validator(mode="after")
     def _distinct_tokens(self) -> Self:
-        if (
-            self.read_token is not None
-            and self.admin_token is not None
-            and self.read_token.get_secret_value() == self.admin_token.get_secret_value()
-        ):
-            raise ValueError("read_token and admin_token must be different")
+        if "admin" in self.principals:
+            raise ValueError("the identity name admin is reserved")
+        tokens = [principal.token.get_secret_value() for principal in self.principals.values()]
+        if self.admin_token is not None:
+            tokens.append(self.admin_token.get_secret_value())
+        if any(not token for token in tokens) or len(tokens) != len(set(tokens)):
+            raise ValueError("authentication tokens must be nonempty and different")
         return self
 
 
@@ -100,6 +125,7 @@ class LimitSettings(_Section):
     request_timeout_s: float = Field(default=20.0, gt=0)
     rate_limit_per_minute: int = Field(default=120, ge=1)
     max_upload_bytes: int = Field(default=200 * 1024 * 1024, ge=1)
+    max_api_body_bytes: int = Field(default=65_536, ge=1024)
 
     @model_validator(mode="after")
     def _default_within_max(self) -> Self:
@@ -142,12 +168,6 @@ class Settings(_Section):
     retrieval: RetrievalSettings = RetrievalSettings()
     limits: LimitSettings = LimitSettings()
 
-    @model_validator(mode="after")
-    def _remote_requires_token(self) -> Self:
-        if self.server.host not in LOOPBACK_HOSTS and self.auth.read_token is None:
-            raise ValueError("auth.read_token is required when listening on a non-loopback address")
-        return self
-
 
 def _merge(base: dict[str, Any], key_path: list[str], value: str) -> None:
     node = base
@@ -156,7 +176,17 @@ def _merge(base: dict[str, Any], key_path: list[str], value: str) -> None:
         if not isinstance(child, dict):
             raise ConfigError(f"environment override conflicts with scalar key {key!r}")
         node = child
-    node[key_path[-1]] = value
+    if (
+        len(key_path) == 4
+        and key_path[:2] == ["auth", "principals"]
+        and key_path[-1] == "allowed_documents"
+    ):
+        try:
+            node[key_path[-1]] = yaml.safe_load(value)
+        except yaml.YAMLError as exc:
+            raise ConfigError("invalid allowed_documents environment override") from exc
+    else:
+        node[key_path[-1]] = value
 
 
 def load_settings(path: Path | None = None, environ: Mapping[str, str] | None = None) -> Settings:

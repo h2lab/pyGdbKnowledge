@@ -5,6 +5,7 @@
 # Each question lists the evidence a correct answer needs; `document` is matched against the
 # document id, title and device, `contains` against the chunk text (case-insensitive).
 # Each `expect` entry is an acceptable alternative; all its criteria must match.
+# `forbid` explicitly identifies known misleading passages and is reported independently.
 # Categories describe the domain under evaluation (register, address, bitfield, dma, timing,
 # hardware, errata, cross, intent, security, architecture, development, language, assembly,
 # protocol, peripheral and fpga).
@@ -150,6 +151,7 @@ questions:
     category: cross
     query: how to enable the USART1 peripheral clock on STM32U5
     expect: [{document: u5, contains: ["APB2ENR", "USART1EN"]}]
+    forbid: [{document: u5, contains: ["USART1SEL"], not_contains: ["USART1EN"]}]
 
   # --- technical intent (exercises the concept registry and query expansion) ---
   # These queries avoid the vocabulary of the documents on purpose: without expansion they

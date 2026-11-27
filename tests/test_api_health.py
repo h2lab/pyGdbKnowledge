@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from silicore_knowledge import __version__
-from silicore_knowledge.config import Settings
+from silicore_knowledge.config import LimitSettings, Settings
 from silicore_knowledge.main import REQUEST_ID_HEADER, create_app
 from silicore_knowledge.workspace import Workspace
 
@@ -17,7 +17,7 @@ from silicore_knowledge.workspace import Workspace
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     """Test client on an app backed by a temporary workspace."""
-    settings = Settings(workspace=tmp_path / "ws")
+    settings = Settings(workspace=tmp_path / "ws", limits=LimitSettings(min_score=0.01))
     return TestClient(create_app(settings, Workspace(settings.workspace)))
 
 

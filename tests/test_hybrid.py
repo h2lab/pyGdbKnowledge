@@ -17,6 +17,7 @@ from silicore_knowledge.storage.models import (
     Chunk,
     Document,
     DocumentStatus,
+    ScopedSearchFilters,
     SearchFilters,
     Section,
     SourceType,
@@ -225,6 +226,17 @@ def test_stale_vectors_of_quarantined_documents_are_dropped(
     hits = searcher.search("instructions", SearchFilters(), 10)
     assert "bad" not in {h.chunk.document_id for h in hits}
     assert {h.chunk.document_id for h in hits} == {"official", "forum"}
+
+
+def test_vector_payload_cannot_bypass_catalog_authorization(
+    catalog: Catalog, store: InMemoryVectorStore
+) -> None:
+    """A stale or forged vector payload cannot authorize a different document's chunk."""
+    store.upsert([VectorRecord("forum:0", "official", (1.0, 0.0), manufacturer="ST")])
+    searcher = HybridSearcher(catalog, StubEmbedder((1.0, 0.0)), store)
+    filters = ScopedSearchFilters(allowed_document_ids=("official",))
+    hits = searcher.search("usart_isr", filters, 10)
+    assert hits and all(hit.document.document_id == "official" for hit in hits)
 
 
 def test_filters_apply_to_vector_side(catalog: Catalog, store: InMemoryVectorStore) -> None:

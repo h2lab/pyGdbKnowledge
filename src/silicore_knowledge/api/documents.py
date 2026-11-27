@@ -5,12 +5,14 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel
 
 from ..config import Settings
+from ..security import audit_logger
 from ..storage.catalog import Catalog
 from ..storage.models import ID_PATTERN, Document, DocumentStatus, Section
+from .auth import Principal, require_read
 from .deps import get_catalog, get_settings
 
 router = APIRouter(prefix="/documents")
@@ -47,31 +49,49 @@ class SectionContent(BaseModel):
     truncated: bool
 
 
-def _active_document(catalog: Catalog, document_id: str) -> Document:
+def _active_document(
+    catalog: Catalog, document_id: str, principal: Principal, request: Request
+) -> Document:
     document = catalog.get_document(document_id)
-    # Quarantined documents must not be retrievable (ANSSI R25+).
-    if document is None or document.status is not DocumentStatus.ACTIVE:
+    allowed = (
+        document is not None
+        and document.status is DocumentStatus.ACTIVE
+        and principal.allows(document_id)
+    )
+    audit_logger.info(
+        "event=document_access request_id=%s identity=%s document_id=%s decision=%s",
+        getattr(request.state, "request_id", "-"),
+        principal.name,
+        document_id,
+        "allow" if allowed else "deny",
+    )
+    if not allowed or document is None:
         raise HTTPException(status_code=404, detail="document not found")
     return document
 
 
 @router.get("/{document_id}", response_model=Document)
 def get_document(
-    document_id: DocumentId, catalog: Annotated[Catalog, Depends(get_catalog)]
+    request: Request,
+    document_id: DocumentId,
+    catalog: Annotated[Catalog, Depends(get_catalog)],
+    principal: Annotated[Principal, Depends(require_read)],
 ) -> Document:
     """Return the metadata of a document."""
-    return _active_document(catalog, document_id)
+    return _active_document(catalog, document_id, principal, request)
 
 
 @router.get("/{document_id}/sections", response_model=SectionList)
 def list_sections(
+    request: Request,
     document_id: DocumentId,
     catalog: Annotated[Catalog, Depends(get_catalog)],
+    principal: Annotated[Principal, Depends(require_read)],
     limit: Annotated[int, Query(ge=1, le=MAX_SECTIONS_PAGE)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> SectionList:
     """Return a page of the sections of a document, in reading order."""
-    _active_document(catalog, document_id)
+    _active_document(catalog, document_id, principal, request)
     page = catalog.list_sections(document_id, limit=limit + 1, offset=offset)
     return SectionList(
         document_id=document_id,
@@ -83,13 +103,15 @@ def list_sections(
 
 @router.get("/{document_id}/section/{section_id}", response_model=SectionContent)
 def get_section(
+    request: Request,
     document_id: DocumentId,
     section_id: SectionId,
     catalog: Annotated[Catalog, Depends(get_catalog)],
     settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal, Depends(require_read)],
 ) -> SectionContent:
     """Return the text of a section, truncated to the configured size limit."""
-    _active_document(catalog, document_id)
+    _active_document(catalog, document_id, principal, request)
     section = catalog.get_section(document_id, section_id)
     if section is None:
         raise HTTPException(status_code=404, detail="section not found")

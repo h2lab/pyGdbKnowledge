@@ -42,6 +42,8 @@ def env(tmp_path: Path) -> tuple[Settings, Workspace, Catalog, str]:
     workspace = Workspace(settings.workspace)
     catalog = Catalog(workspace.catalog_path)
     result = import_pdf(workspace, catalog, _pdf(tmp_path / "a.pdf"), META, 10_000_000)
+    Indexer(settings, workspace, catalog).release(result.document.document_id)
+    catalog.replace_content(result.document.document_id, [], [])
     return settings, workspace, catalog, result.document.document_id
 
 
@@ -135,10 +137,14 @@ def test_cli_index_reindex_delete(tmp_path: Path, capsys: pytest.CaptureFixture[
     config.write_text(f"workspace: {tmp_path / 'ws'}\n", encoding="utf-8")
     pdf = _pdf(tmp_path / "a.pdf")
     base = ["--config", str(config)]
-    assert cli.main(["ingest", *base, "--source-type", "official", "--index", str(pdf)]) == 0
+    assert cli.main(["ingest", *base, "--source-type", "official", "--index", str(pdf)]) == 1
     out = capsys.readouterr().out
-    assert "indexed:" in out
+    assert "status=quarantined" in out
     doc_id = out.split("imported: ")[1].split()[0]
+    assert cli.main(["screen", *base, doc_id]) == 0
+    assert "rules=none" in capsys.readouterr().out
+    assert cli.main(["release", *base, doc_id]) == 0
+    assert "released:" in capsys.readouterr().out
     assert cli.main(["index", *base]) == 0
     assert "indexed:" not in capsys.readouterr().out
     assert cli.main(["reindex", *base, doc_id]) == 0

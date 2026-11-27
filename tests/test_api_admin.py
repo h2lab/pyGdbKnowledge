@@ -4,6 +4,7 @@
 """Tests for the admin ingestion API."""
 
 import hashlib
+import threading
 import time
 from pathlib import Path
 
@@ -12,8 +13,17 @@ from fastapi.testclient import TestClient
 from pdfmaker import make_pdf
 from pydantic import SecretStr
 
-from silicore_knowledge.config import AuthSettings, IngestionSettings, LimitSettings, Settings
+from silicore_knowledge.config import (
+    AuthSettings,
+    IngestionSettings,
+    LimitSettings,
+    ReadPrincipal,
+    Settings,
+)
 from silicore_knowledge.main import create_app
+from silicore_knowledge.ingestion.pipeline import BatchReport, Indexer
+from silicore_knowledge.ingestion.tasks import TaskCapacityError, TaskRegistry
+from silicore_knowledge.storage.catalog import Catalog
 from silicore_knowledge.workspace import Workspace
 
 ADMIN = {"Authorization": "Bearer admin-secret-value"}
@@ -29,10 +39,15 @@ def client(tmp_path: Path) -> TestClient:
     settings = Settings(
         workspace=tmp_path / "ws",
         auth=AuthSettings(
-            read_token=SecretStr("read-secret-value"), admin_token=SecretStr("admin-secret-value")
+            principals={
+                "reader": ReadPrincipal(
+                    token=SecretStr("read-secret-value"), allowed_documents=("*",)
+                )
+            },
+            admin_token=SecretStr("admin-secret-value"),
         ),
         ingestion=IngestionSettings(import_dirs=[inbox]),
-        limits=LimitSettings(max_upload_bytes=200_000),
+        limits=LimitSettings(max_upload_bytes=200_000, min_score=0.01),
     )
     return TestClient(create_app(settings, Workspace(settings.workspace)))
 
@@ -50,14 +65,24 @@ def _wait(client: TestClient, task_id: str) -> dict[str, object]:
     raise AssertionError("task did not finish")
 
 
-def test_upload_indexes_and_makes_document_searchable(client: TestClient, tmp_path: Path) -> None:
-    """An uploaded PDF is imported, indexed in the background and then searchable."""
+def test_upload_requires_review_before_search(client: TestClient, tmp_path: Path) -> None:
+    """An uploaded PDF remains inaccessible until an administrator releases it."""
     content = _pdf_bytes(tmp_path)
     response = client.post("/api/v1/admin/ingest", params=QUERY, content=content, headers=ADMIN)
     assert response.status_code == 202
     body = response.json()
     assert body["created"] is True
-    done = _wait(client, body["task"]["task_id"])
+    assert body["status"] == "quarantined" and body["task"] is None
+    assert client.post("/api/v1/search", json={"query": "USART_ISR"}, headers=READ).json() == {
+        "results": []
+    }
+    doc_url = f"/api/v1/admin/documents/{body['document_id']}"
+    assert client.post(f"{doc_url}/screen", headers=READ).status_code == 401
+    assert client.post(f"{doc_url}/screen", headers=ADMIN).json()["rules"] == []
+    assert client.post(f"{doc_url}/release", headers=READ).status_code == 401
+    released = client.post(f"{doc_url}/release", headers=ADMIN)
+    assert released.status_code == 202
+    done = _wait(client, released.json()["task_id"])
     assert done["status"] == "done" and done["chunks"]
     found = client.post("/api/v1/search", json={"query": "USART_ISR"}, headers=READ)
     assert [h["document_id"] for h in found.json()["results"]] == [body["document_id"]]
@@ -98,7 +123,7 @@ def test_path_import_is_restricted_to_allowed_directories(
 
     ok = client.post(url, json={**QUERY, "path": str(allowed)}, headers=ADMIN)
     assert ok.status_code == 202
-    assert _wait(client, ok.json()["task"]["task_id"])["status"] == "done"
+    assert ok.json()["status"] == "quarantined"
     for path in (outside, tmp_path / "inbox" / "link.pdf", Path("/etc/passwd")):
         refused = client.post(url, json={**QUERY, "path": str(path)}, headers=ADMIN)
         assert refused.status_code == 403
@@ -113,8 +138,11 @@ def test_failed_indexing_is_reported(client: TestClient, tmp_path: Path) -> None
     fake = b"%PDF-1.7\nthis is not a real document\n"
     response = client.post("/api/v1/admin/ingest", params=QUERY, content=fake, headers=ADMIN)
     assert response.status_code == 202
-    done = _wait(client, response.json()["task"]["task_id"])
-    assert done["status"] == "failed" and done["error"]
+    doc_id = response.json()["document_id"]
+    response = client.post(f"/api/v1/admin/documents/{doc_id}/release", headers=ADMIN)
+    assert response.status_code == 202
+    assert _wait(client, response.json()["task_id"])["status"] == "failed"
+    assert client.get(f"/api/v1/documents/{doc_id}", headers=ADMIN).status_code == 404
 
 
 def test_unknown_task(client: TestClient) -> None:
@@ -122,12 +150,41 @@ def test_unknown_task(client: TestClient) -> None:
     assert client.get("/api/v1/admin/tasks/" + "0" * 32, headers=ADMIN).status_code == 404
 
 
+def test_index_task_queue_is_bounded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unfinished tasks cannot grow beyond the configured in-memory capacity."""
+    settings = Settings(workspace=tmp_path / "ws")
+    workspace = Workspace(settings.workspace)
+    catalog = Catalog(workspace.catalog_path)
+    indexer = Indexer(settings, workspace, catalog)
+    started, finish = threading.Event(), threading.Event()
+
+    def blocked(*args: object, **kwargs: object) -> BatchReport:
+        started.set()
+        assert finish.wait(5)
+        return BatchReport()
+
+    monkeypatch.setattr(indexer, "index_documents", blocked)
+    tasks = TaskRegistry(indexer, catalog, max_tasks=1)
+    try:
+        tasks.submit("first")
+        assert started.wait(5)
+        with pytest.raises(TaskCapacityError):
+            tasks.submit("second")
+    finally:
+        finish.set()
+        tasks.close()
+
+
 def test_delete_endpoint_removes_document(client: TestClient, tmp_path: Path) -> None:
     """DELETE removes the document so that it is no longer searchable or readable."""
     created = client.post(
         "/api/v1/admin/ingest", params=QUERY, content=_pdf_bytes(tmp_path), headers=ADMIN
     ).json()
-    _wait(client, created["task"]["task_id"])
+    released = client.post(
+        f"/api/v1/admin/documents/{created['document_id']}/release", headers=ADMIN
+    )
+    assert released.status_code == 202
+    assert _wait(client, released.json()["task_id"])["status"] == "done"
     url = f"/api/v1/admin/documents/{created['document_id']}"
     assert client.delete(url, headers=READ).status_code == 401
     assert client.delete(url, headers=ADMIN).status_code == 204

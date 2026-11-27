@@ -17,6 +17,7 @@ from .models import (
     Chunk,
     Document,
     DocumentStatus,
+    ScopedSearchFilters,
     SearchFilters,
     SearchHit,
     Section,
@@ -532,6 +533,12 @@ class Catalog:
         """
         clauses = ["chunks_fts MATCH ?", "d.status = ?"]
         params: list[str | int] = [match, DocumentStatus.ACTIVE.value]
+        if isinstance(filters, ScopedSearchFilters) and filters.allowed_document_ids is not None:
+            if not filters.allowed_document_ids:
+                return []
+            marks = ", ".join("?" for _ in filters.allowed_document_ids)
+            clauses.append(f"d.document_id IN ({marks})")
+            params.extend(filters.allowed_document_ids)
         for column, value in (
             ("d.manufacturer", filters.manufacturer),
             ("d.device_family", filters.device_family),
@@ -556,7 +563,9 @@ class Catalog:
             rows = db.execute(sql, params).fetchall()
         return [_hit(dict(row), -float(row["rank"])) for row in rows]
 
-    def get_hits(self, chunk_ids: Sequence[str]) -> dict[str, SearchHit]:
+    def get_hits(
+        self, chunk_ids: Sequence[str], filters: SearchFilters | None = None
+    ) -> dict[str, SearchHit]:
         """Load chunks with their documents, keeping only active documents.
 
         Used to re-validate candidates coming from the vector index, which may be stale.
@@ -584,16 +593,47 @@ class Catalog:
                 rows = db.execute(sql, [DocumentStatus.ACTIVE.value, *batch]).fetchall()
             for row in rows:
                 hit = _hit(dict(row), 0.0)
+                if (
+                    isinstance(filters, ScopedSearchFilters)
+                    and filters.allowed_document_ids is not None
+                    and hit.document.document_id not in filters.allowed_document_ids
+                ):
+                    continue
                 found[hit.chunk.chunk_id] = hit
         return found
 
-    def stats(self) -> CatalogStats:
+    def stats(
+        self, allowed_document_ids: tuple[str, ...] | None = None, *, active_only: bool = False
+    ) -> CatalogStats:
         """Return catalog counters."""
         with self._connect() as db:
-            counts = {
-                table: int(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
-                for table in ("documents", "sections", "chunks")
-            }
+            if allowed_document_ids is None and not active_only:
+                counts = {
+                    table: int(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                    for table in ("documents", "sections", "chunks")
+                }
+            elif allowed_document_ids == ():
+                counts = dict.fromkeys(("documents", "sections", "chunks"), 0)
+            else:
+                marks = ", ".join("?" for _ in allowed_document_ids or ())
+                scope = (
+                    f" AND d.document_id IN ({marks})" if allowed_document_ids is not None else ""
+                )
+                counts = {
+                    table: int(
+                        db.execute(
+                            "SELECT COUNT(*) FROM "
+                            + (
+                                "documents d"
+                                if table == "documents"
+                                else f"{table} t JOIN documents d ON t.document_id = d.document_id"
+                            )
+                            + f" WHERE d.status = ?{scope}",
+                            [DocumentStatus.ACTIVE.value, *(allowed_document_ids or ())],
+                        ).fetchone()[0]
+                    )
+                    for table in ("documents", "sections", "chunks")
+                }
         return CatalogStats(schema_version=SCHEMA_VERSION, **counts)
 
 

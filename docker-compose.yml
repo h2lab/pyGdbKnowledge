@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 H2Lab Development Team
 # SPDX-License-Identifier: Apache-2.0
 
-# Usage: cp .env.example .env, set the two tokens, then `docker compose up -d`.
+# Usage: cp .env.example .env, set tokens, document grants and a calibrated minimum score.
 # Qdrant is reachable only from the internal network; the API is published on the loopback
 # interface of the host. For remote access, put a TLS reverse proxy in front (see doc/).
 services:
@@ -18,8 +18,10 @@ services:
       qdrant:
         condition: service_healthy
     environment:
-      SILICORE_KNOWLEDGE__AUTH__READ_TOKEN: ${KNOWLEDGE_READ_TOKEN:?set KNOWLEDGE_READ_TOKEN in .env}
+      SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__PYGDBTOOLKIT__TOKEN: ${KNOWLEDGE_READ_TOKEN:?set KNOWLEDGE_READ_TOKEN in .env}
+      SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__PYGDBTOOLKIT__ALLOWED_DOCUMENTS: "${KNOWLEDGE_ALLOWED_DOCUMENTS:-[]}"
       SILICORE_KNOWLEDGE__AUTH__ADMIN_TOKEN: ${KNOWLEDGE_ADMIN_TOKEN:?set KNOWLEDGE_ADMIN_TOKEN in .env}
+      SILICORE_KNOWLEDGE__LIMITS__MIN_SCORE: ${KNOWLEDGE_MIN_SCORE:?set a calibrated KNOWLEDGE_MIN_SCORE in .env}
       SILICORE_KNOWLEDGE__QDRANT__URL: http://qdrant:6333
       SILICORE_KNOWLEDGE__EMBEDDINGS__ENABLED: ${KNOWLEDGE_EMBEDDINGS:-false}
       SILICORE_KNOWLEDGE__EMBEDDINGS__MODEL: ${KNOWLEDGE_EMBEDDING_MODEL:-BAAI/bge-m3}

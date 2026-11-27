@@ -230,10 +230,10 @@ def test_import_and_index_svd(svd_file: Path, tmp_path: Path) -> None:
         source_type=SourceType.VENDOR, manufacturer="STMicroelectronics", document_type="svd"
     )
     document = import_document(workspace, catalog, svd_file, meta, 10_000_000).document
-    stored = workspace.stored_document(document.content_hash)
+    stored = workspace.stored_document(document.content_hash, Area.QUARANTINE)
     assert stored is not None and stored.suffix == ".svd"
     indexer = Indexer(settings, workspace, catalog)
-    result = indexer.index_document(document.document_id)
+    result = indexer.release(document.document_id)
     assert result.sections == 2 and result.chunks >= 2
     hits = HybridSearcher(catalog).search(
         "USART1_CR1 enable", SearchFilters(peripheral="usart1"), 5

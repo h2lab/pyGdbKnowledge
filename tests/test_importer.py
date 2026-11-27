@@ -12,7 +12,7 @@ import pytest
 from silicore_knowledge import cli
 from silicore_knowledge.ingestion.importer import DocumentMetadata, IngestError, import_pdf
 from silicore_knowledge.storage.catalog import Catalog
-from silicore_knowledge.storage.models import SourceType
+from silicore_knowledge.storage.models import DocumentStatus, SourceType
 from silicore_knowledge.workspace import Area, Workspace
 
 PDF = b"%PDF-1.7\n% fake content for tests\n"
@@ -43,12 +43,14 @@ def test_import_stores_file_and_registers_document(
     """The PDF is copied under its SHA-256 and registered with its metadata."""
     result = import_pdf(workspace, catalog, _pdf(tmp_path), META, 10_000)
     sha = hashlib.sha256(PDF).hexdigest()
-    stored = workspace.document_path(sha)
+    stored = workspace.document_path(sha, Area.QUARANTINE)
     assert result.created and stored.read_bytes() == PDF
     assert stat.S_IMODE(stored.stat().st_mode) == 0o600
     assert result.document.document_id == f"stm32-datasheet-{sha[:8]}"
     assert result.document.title == "STM32 Datasheet"
     assert result.document.manufacturer == "ST"
+    assert result.document.status is DocumentStatus.QUARANTINED
+    assert not workspace.document_path(sha).exists()
     assert catalog.get_document_by_hash(sha) == result.document
     assert list(workspace.area(Area.TMP).iterdir()) == []
 
@@ -60,7 +62,7 @@ def test_duplicate_content_is_not_stored_twice(
     first = import_pdf(workspace, catalog, _pdf(tmp_path), META, 10_000)
     again = import_pdf(workspace, catalog, _pdf(tmp_path, "copy.pdf"), META, 10_000)
     assert not again.created and again.document.document_id == first.document.document_id
-    assert len(list(workspace.area(Area.DOCUMENTS).iterdir())) == 1
+    assert len(list(workspace.area(Area.QUARANTINE).iterdir())) == 1
     assert list(workspace.area(Area.TMP).iterdir()) == []
 
 

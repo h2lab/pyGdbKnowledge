@@ -16,7 +16,7 @@ from silicore_knowledge.retrieval.vector_store import (
     VectorStore,
     VectorStoreError,
 )
-from silicore_knowledge.storage.models import SearchFilters
+from silicore_knowledge.storage.models import ScopedSearchFilters, SearchFilters
 
 Factory = Callable[[int], VectorStore]
 
@@ -61,6 +61,15 @@ def test_search_limit(factory: Factory) -> None:
     store.upsert(_records())
     assert len(store.search((1.0, 0.0), SearchFilters(), 2)) == 2
     assert store.search((1.0, 0.0), SearchFilters(), 0) == []
+
+
+def test_document_scope_is_enforced_before_limit(factory: Factory) -> None:
+    """An unauthorized closer vector cannot crowd out an authorized hit."""
+    store = factory(2)
+    store.upsert(_records())
+    filters = ScopedSearchFilters(allowed_document_ids=("doc-b",))
+    assert [hit.chunk_id for hit in store.search((1.0, 0.0), filters, 1)] == ["b:1"]
+    assert store.search((1.0, 0.0), ScopedSearchFilters(allowed_document_ids=()), 3) == []
 
 
 def test_filters_are_case_insensitive_and_combined(factory: Factory) -> None:

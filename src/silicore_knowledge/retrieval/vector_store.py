@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ..config import QdrantSettings
-from ..storage.models import SearchFilters
+from ..storage.models import ScopedSearchFilters, SearchFilters
 
 _FILTER_FIELDS = ("manufacturer", "device_family", "device", "peripheral")
 _NAMESPACE = uuid.UUID("5f0c1c2e-6d1b-4e47-9a53-0c8d7d2f4b11")
@@ -74,6 +74,12 @@ def _norm(value: str | None) -> str | None:
 
 
 def _matches(record: VectorRecord, filters: SearchFilters) -> bool:
+    if (
+        isinstance(filters, ScopedSearchFilters)
+        and filters.allowed_document_ids is not None
+        and record.document_id not in filters.allowed_document_ids
+    ):
+        return False
     for name in _FILTER_FIELDS:
         wanted = _norm(getattr(filters, name))
         if wanted is not None and _norm(getattr(record, name)) != wanted:
@@ -178,6 +184,13 @@ class QdrantVectorStore:
     def _filter(self, filters: SearchFilters) -> Any:
         models = self._models
         must: list[Any] = []
+        if isinstance(filters, ScopedSearchFilters) and filters.allowed_document_ids is not None:
+            must.append(
+                models.FieldCondition(
+                    key="document_id",
+                    match=models.MatchAny(any=list(filters.allowed_document_ids)),
+                )
+            )
         for name in _FILTER_FIELDS:
             value = _norm(getattr(filters, name))
             if value is not None:
@@ -227,6 +240,8 @@ class QdrantVectorStore:
                 f"expected a vector of dimension {self._dimension}, got {len(vector)}"
             )
         if limit < 1:
+            return []
+        if isinstance(filters, ScopedSearchFilters) and filters.allowed_document_ids == ():
             return []
         try:
             response = self._client.query_points(

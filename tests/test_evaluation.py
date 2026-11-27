@@ -11,7 +11,7 @@ from test_svd import SVD
 
 from silicore_knowledge import cli
 from silicore_knowledge.config import Settings
-from silicore_knowledge.evaluation import EvaluationError, evaluate, load_questions
+from silicore_knowledge.evaluation import EvaluationError, Expectation, evaluate, load_questions
 from silicore_knowledge.ingestion.importer import DocumentMetadata, import_document
 from silicore_knowledge.ingestion.pipeline import Indexer
 from silicore_knowledge.retrieval.hybrid import HybridSearcher
@@ -49,7 +49,7 @@ def env(tmp_path: Path) -> tuple[Settings, Workspace, Catalog]:
     catalog = Catalog(workspace.catalog_path)
     meta = DocumentMetadata(source_type=SourceType.VENDOR, title="STM32TEST SVD")
     document = import_document(workspace, catalog, source, meta, 10_000_000).document
-    Indexer(settings, workspace, catalog).index_document(document.document_id)
+    Indexer(settings, workspace, catalog).release(document.document_id)
     return settings, workspace, catalog
 
 
@@ -105,6 +105,8 @@ def test_u5_clock_question_requires_clock_enable_evidence(
     )
     hit = SearchHit(chunk=chunk, document=document, score=1.0)
     assert any(expectation.matches(hit) for expectation in question.expect) is relevant
+    expected_forbidden = title == "STM32U595 SVD" and "USART1SEL" in text and "USART1EN" not in text
+    assert any(expectation.matches(hit) for expectation in question.forbid) is expected_forbidden
 
 
 @pytest.mark.parametrize(
@@ -181,6 +183,9 @@ def test_buffer_overflow_question_requires_testing_evidence(
         [{"id": "a", "query": "x", "expect": []}],
         [{"id": "a", "query": "x", "expect": [{"bogus": 1}]}],
         [{"id": "a", "query": "x", "expect": [{"page": 1}]}] * 2,
+        [{"id": "a", "query": "x", "expect": [{}]}],
+        [{"id": "a", "query": "x", "expect": [{"contains": [" "]}]}],
+        [{"id": "a", "query": "x", "expect": [{"not_contains": ["x"]}]}],
     ],
 )
 def test_invalid_question_files(tmp_path: Path, content: object) -> None:
@@ -202,6 +207,78 @@ def test_command(
     out = capsys.readouterr().out
     assert "wrong-page" in out and "R@5=" in out and "MRR=" in out
     assert cli.main(["evaluate", str(questions), "--config", str(config), "--min-recall", "1"]) == 1
+
+
+def test_forbidden_passage_is_reported_and_cannot_count_as_expected(
+    env: tuple[Settings, Workspace, Catalog], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A misleading passage is counted separately and cannot improve the positive rank."""
+    data = [
+        {
+            "id": "misleading",
+            "query": "USART1_CR1",
+            "expect": [{"peripheral": "USART1"}],
+            "forbid": [{"peripheral": "USART1", "contains": ["USART1_CR1"]}],
+        }
+    ]
+    path = write(tmp_path / "q.yaml", data)
+    questions = load_questions(path)
+    report = evaluate(HybridSearcher(env[2]), questions)
+    assert report.results[0].rank is None
+    assert report.results[0].forbidden_ranks == (1,)
+    assert report.forbidden(1) == 1
+    config = tmp_path / "s.yaml"
+    config.write_text(yaml.safe_dump({"workspace": str(tmp_path / "ws")}), encoding="utf-8")
+    assert cli.main(["evaluate", str(path), "--config", str(config), "--max-forbidden", "0"]) == 1
+    captured = capsys.readouterr()
+    assert "forbidden@5=1" in captured.out
+    assert "exceeds 0" in captured.err
+
+
+def test_forbidden_gate_requires_curated_negative_criteria(
+    env: tuple[Settings, Workspace, Catalog], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A benchmark with no forbidden examples cannot pass the forbidden gate."""
+    config = tmp_path / "s.yaml"
+    config.write_text(yaml.safe_dump({"workspace": str(tmp_path / "ws")}), encoding="utf-8")
+    questions = write(tmp_path / "q.yaml", QUESTIONS)
+    assert (
+        cli.main(["evaluate", str(questions), "--config", str(config), "--max-forbidden", "0"]) == 1
+    )
+    assert "requires at least one forbidden criterion" in capsys.readouterr().err
+
+
+def test_forbidden_negative_criteria_are_conjunctive() -> None:
+    """A forbidden clock-selection passage does not exclude one also proving clock enable."""
+    expectation = Expectation(contains=("USART1SEL",), not_contains=("USART1EN",))
+    document = Document(
+        document_id="u5", title="U5", content_hash="a" * 64, source_type=SourceType.VENDOR
+    )
+    chunk = Chunk(
+        chunk_id="u5:0",
+        document_id="u5",
+        ordinal=0,
+        text="USART1SEL USART1EN",
+        content_hash="b" * 64,
+    )
+    assert not expectation.matches(SearchHit(chunk=chunk, document=document, score=1))
+    assert expectation.matches(
+        SearchHit(chunk=chunk.model_copy(update={"text": "USART1SEL"}), document=document, score=1)
+    )
+
+
+def test_evaluate_command_uses_configured_relevance_threshold(
+    env: tuple[Settings, Workspace, Catalog], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Evaluation exercises the same score cutoff as the API."""
+    config = tmp_path / "s.yaml"
+    config.write_text(
+        yaml.safe_dump({"workspace": str(tmp_path / "ws"), "limits": {"min_score": 1.0}}),
+        encoding="utf-8",
+    )
+    questions = write(tmp_path / "q.yaml", [QUESTIONS[0]])
+    assert cli.main(["evaluate", str(questions), "--config", str(config)]) == 0
+    assert "hit                      register     rank=miss" in capsys.readouterr().out
 
 
 def test_category_threshold_detects_failure_hidden_by_global_recall(

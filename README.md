@@ -5,6 +5,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # silicore-knowledge
 
+![Silicore Knowledge RAG architecture](doc/silicore-rag.png)
+
 Standalone knowledge server (hybrid RAG) used by pyGdbToolkit over HTTP.
 Target architecture: see [doc/architecture.md](doc/architecture.md).
 To install, run, back up and operate the service: [doc/operations.md](doc/operations.md).
@@ -15,81 +17,68 @@ To install, run, back up and operate the service: [doc/operations.md](doc/operat
 python -m venv .venv && . .venv/bin/activate
 pip install -e .[pdf]
 
-printf 'workspace: ./workspace\n' > settings.yaml
+printf 'workspace: %s/workspace\n' "$PWD" > settings.yaml
 export SILICORE_KNOWLEDGE_CONFIG=$PWD/settings.yaml
 
-silicore-knowledge sync --index          # download and index the corpus of config/corpus.yaml
-silicore-knowledge serve &               # http://127.0.0.1:8080
-curl -s http://127.0.0.1:8080/api/v1/health
-curl -s -X POST http://127.0.0.1:8080/api/v1/search -H 'Content-Type: application/json' \
+silicore-knowledge sync                  # downloads into quarantine
+silicore-knowledge audit                 # find document IDs and hashes
+silicore-knowledge screen DOCUMENT_ID    # heuristic screening, not a substitute for review
+# Review the original in workspace/quarantine/, then:
+silicore-knowledge release DOCUMENT_ID  # approve and index it
+export SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__AGENT__TOKEN="$READ"
+export SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__AGENT__ALLOWED_DOCUMENTS='["DOCUMENT_ID"]'
+export SILICORE_KNOWLEDGE__LIMITS__MIN_SCORE="$CALIBRATED_MIN_SCORE"
+silicore-knowledge serve                 # in another terminal, with the same environment
+curl -s -X POST http://127.0.0.1:8080/api/v1/search \
+     -H "Authorization: Bearer $READ" -H 'Content-Type: application/json' \
      -d '{"query": "FLASH_ACR LATENCY wait states", "filters": {"device": "STM32F407"}}'
 ```
 
 `sync --dry-run` lists what would be downloaded. `silicore-knowledge ingest FILE --source-type
-official --index` imports your own PDF or SVD files instead. On loopback no token is needed;
-see [doc/operations.md](doc/operations.md) for authentication and the other commands.
+official` imports your own PDF or SVD files into quarantine instead. Read access requires a
+configured identity even on loopback; see [doc/operations.md](doc/operations.md).
+Set `CALIBRATED_MIN_SCORE` to a positive threshold validated on the target corpus and model;
+the server refuses to start with the default zero threshold.
 
 ## Docker Compose
 
-Note that this compose file is described as an example. For production use, please update
-accordingly to your needs, and avoid such a source tree related link.
-
-The stack runs the service and Qdrant (internal network only). The API is published on
-`127.0.0.1:8080`.
+The example stack runs the service and Qdrant (internal network only); the API is published on
+`127.0.0.1:8080`. Adapt it to the deployment before production use.
 
 ```sh
 cp .env.example .env
-# edit .env: set KNOWLEDGE_READ_TOKEN and KNOWLEDGE_ADMIN_TOKEN to two different secrets,
-# for example generated with `openssl rand -hex 32`
+# Edit .env: generate distinct secrets with `openssl rand -hex 32` and configure both tokens.
+# Start with KNOWLEDGE_ALLOWED_DOCUMENTS='[]' and KNOWLEDGE_EMBEDDINGS=false.
 
-docker compose build                 # lexical only: KNOWLEDGE_EXTRAS=pdf in .env
-docker compose up -d
-docker compose ps                    # both services should become "healthy"
+# Build the image; a zero score is allowed for one-off offline CLI commands only.
+KNOWLEDGE_MIN_SCORE=0 docker compose build
 ```
 
-Load documents (the container reads the manifest from `./config`, mounted at `/corpus`):
+Follow the [Compose document and corpus workflow](doc/operations.md#docker-compose-document-and-corpus-workflow)
+to initialize the reviewed lock, import documents into quarantine, review and release them,
+evaluate the corpus and configure document grants and a positive relevance threshold. Then run
+`docker compose up -d` and check `docker compose ps`.
 
-On Linux, if the directory or manifest is not readable by the container's user (UID 10001),
-grant it access with ACLs before running `sync`:
+Other operations: `docker compose logs -f knowledge` and `docker compose down` (data kept in
+the `workspace` and `qdrant` volumes). `docker compose down -v` deletes these volumes.
 
-```sh
-setfacl -m u:10001:--x config
-setfacl -m u:10001:r-- config/corpus.yaml
-```
-
-This grants traversal of `config` and read access to this manifest, not to other private
-files. Repeat the file ACL for another manifest or if the file is replaced. ACL support and
-the `setfacl` utility are required.
-
-```sh
-docker compose exec knowledge silicore-knowledge sync \
-    --manifest /corpus/corpus.yaml --lock /var/lib/silicore-knowledge/corpus.lock.json --index
-
-# your own files, mounted read-only for the duration of the command
-docker compose run --rm -v "$PWD/docs:/in:ro" knowledge \
-    ingest /in/my_manual.pdf --source-type vendor --device STM32U585 --index
-```
-
-Other operations: `docker compose logs -f knowledge`, `docker compose down` (data kept in the
-`workspace` and `qdrant` volumes), `docker compose down -v` (deletes the data).
-
-Semantic search: put the embedding model in `./models` (a Hugging Face cache layout, prepared
-beforehand because the container never downloads), set `KNOWLEDGE_EMBEDDINGS=true` in `.env`,
-restart, then `docker compose exec knowledge silicore-knowledge reindex`.
+Semantic search requires a locally prepared model, a full reindex and a new threshold
+calibration. See [embedding model versions](doc/operations.md#embedding-model-versions).
 
 ## Tokens
 
-Two static bearer tokens, sent as `Authorization: Bearer <token>`:
+Named read identities and an administrative identity use distinct static bearer tokens,
+sent as `Authorization: Bearer <token>`:
 
 | Token | Setting | Grants |
 | --- | --- | --- |
-| read | `auth.read_token` | `/search`, `/documents/*`, `/stats` (what the agent tools use) |
-| admin | `auth.admin_token` | everything the read token allows, plus `/admin/*` (ingest, delete, tasks) |
+| named reader | `auth.principals.<name>` | `/search`, `/documents/*`, `/stats`, scoped to its allowed documents |
+| admin | `auth.admin_token` | all active documents and `/admin/*` |
 
 `/health` needs no token. A wrong, missing or under-privileged token always gets the same
 `401`, and every decision is written to the audit log.
 
-**Create** two different random secrets (the server refuses identical values):
+**Create** distinct random secrets (the server refuses duplicate or empty tokens):
 
 ```sh
 openssl rand -hex 32     # run twice: one for read, one for admin
@@ -99,19 +88,18 @@ openssl rand -hex 32     # run twice: one for read, one for admin
 `settings.yaml` and out of git):
 
 ```sh
-export SILICORE_KNOWLEDGE__AUTH__READ_TOKEN=...
+export SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__AGENT__TOKEN=...
+export SILICORE_KNOWLEDGE__AUTH__PRINCIPALS__AGENT__ALLOWED_DOCUMENTS='["DOCUMENT_ID"]'
 export SILICORE_KNOWLEDGE__AUTH__ADMIN_TOKEN=...
 silicore-knowledge serve
 ```
 
-With Compose, put them in `.env` as `KNOWLEDGE_READ_TOKEN` / `KNOWLEDGE_ADMIN_TOKEN`
-(`.env` is git-ignored; use `chmod 600 .env`).
+With Compose, put them in `.env` as `KNOWLEDGE_READ_TOKEN` / `KNOWLEDGE_ADMIN_TOKEN` and set
+`KNOWLEDGE_ALLOWED_DOCUMENTS` to a JSON array (`.env` is git-ignored; use `chmod 600 .env`).
+The empty list grants no documents; `["*"]` explicitly grants every active document.
 
-**Rules enforced at startup:**
-- Listening on a non-loopback address (the container does) requires a read token, otherwise
-  the server refuses to start.
-- On loopback without a read token the read API is open; without an admin token the admin API
-  stays unreachable (every call gets `401`).
+The former `auth.read_token` setting is no longer accepted. Anonymous reads are disabled on all
+interfaces. With no configured tokens, only `/health` and the OpenAPI schema are accessible.
 
 **Use them:** give the read token to the agent (pyGdbToolkit) only; keep the admin token for
 the operator, never in an agent's configuration. The CLI (`ingest`, `sync`, `reindex`, ...)
@@ -130,8 +118,7 @@ send tokens over an untrusted network without a TLS reverse proxy in front.
 
 The service is a retrieval API: it returns ranked passages with provenance, not a generated
 answer. The calling agent (pyGdbToolkit) composes the answer. Examples below use
-`URL=http://127.0.0.1:8080`, `READ` (read token) and `ADMIN` (admin token); drop the
-`Authorization` header on an unauthenticated loopback setup.
+`URL=http://127.0.0.1:8080`, `READ` (read token) and `ADMIN` (admin token).
 
 ### Search
 
@@ -177,12 +164,16 @@ Typical agent flow: `search`, then read the whole section of the best hit throug
 ```sh
 # upload a PDF as the raw body, metadata in the query string
 curl -s -X POST -H "Authorization: Bearer $ADMIN" --data-binary @manual.pdf \
-  "$URL/api/v1/admin/ingest?title=Manual&device=STM32U585&document_type=reference_manual"
-curl -s -H "Authorization: Bearer $ADMIN" $URL/api/v1/admin/tasks/TASK_ID    # indexing status
+  "$URL/api/v1/admin/ingest?source_type=vendor&title=Manual&device=STM32U585&document_type=reference_manual"
+# Inspect the original in quarantine, and screen it before explicitly approving it.
+curl -s -X POST -H "Authorization: Bearer $ADMIN" $URL/api/v1/admin/documents/DOCUMENT_ID/screen
+curl -s -X POST -H "Authorization: Bearer $ADMIN" $URL/api/v1/admin/documents/DOCUMENT_ID/release
+curl -s -H "Authorization: Bearer $ADMIN" $URL/api/v1/admin/tasks/TASK_ID
 curl -s -X DELETE -H "Authorization: Bearer $ADMIN" $URL/api/v1/admin/documents/DOCUMENT_ID
 ```
 
-`GET /api/v1/stats` (read token) gives the catalog counts; the OpenAPI schema is served at
+`GET /api/v1/stats` gives active-document counts scoped to the reader; the admin sees all
+catalog counts. The OpenAPI schema is served at
 `/api/v1/openapi.json`.
 
 ## Development

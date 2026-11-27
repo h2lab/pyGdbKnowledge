@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
-from silicore_knowledge.config import LimitSettings, Settings
+from silicore_knowledge.config import AuthSettings, LimitSettings, ReadPrincipal, Settings
 from silicore_knowledge.main import create_app
 from silicore_knowledge.storage.catalog import Catalog
 from silicore_knowledge.storage.models import Chunk, Document, DocumentStatus, Section, SourceType
@@ -17,6 +18,10 @@ from silicore_knowledge.workspace import Workspace
 HASH_A = "a" * 64
 HASH_B = "b" * 64
 HASH_C = "c" * 64
+AUTH = AuthSettings(
+    principals={"reader": ReadPrincipal(token=SecretStr("read-token"), allowed_documents=("*",))}
+)
+HEADERS = {"Authorization": "Bearer read-token"}
 
 
 def _populate(catalog: Catalog) -> None:
@@ -61,16 +66,20 @@ def _populate(catalog: Catalog) -> None:
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     """Test client with a small populated catalog and a 100-character text limit."""
-    settings = Settings(workspace=tmp_path / "ws", limits=LimitSettings(max_text_chars=100))
+    settings = Settings(
+        workspace=tmp_path / "ws",
+        auth=AUTH,
+        limits=LimitSettings(max_text_chars=100, min_score=0.01),
+    )
     app = create_app(settings, Workspace(settings.workspace))
     _populate(app.state.catalog)
-    return TestClient(app)
+    return TestClient(app, headers=HEADERS)
 
 
 def test_stats(client: TestClient) -> None:
     """Stats report the schema version and counters."""
     body = client.get("/api/v1/stats").json()
-    assert (body["documents"], body["sections"], body["chunks"]) == (2, 3, 2)
+    assert (body["documents"], body["sections"], body["chunks"]) == (1, 3, 2)
 
 
 def test_get_document(client: TestClient) -> None:
@@ -116,7 +125,11 @@ def test_section_content(client: TestClient) -> None:
 
 def test_section_text_is_truncated(tmp_path: Path) -> None:
     """Section text never exceeds the configured limit."""
-    settings = Settings(workspace=tmp_path / "ws", limits=LimitSettings(max_text_chars=100))
+    settings = Settings(
+        workspace=tmp_path / "ws",
+        auth=AUTH,
+        limits=LimitSettings(max_text_chars=100, min_score=0.01),
+    )
     app = create_app(settings, Workspace(settings.workspace))
     catalog: Catalog = app.state.catalog
     catalog.add_document(
@@ -132,5 +145,5 @@ def test_section_text_is_truncated(tmp_path: Path) -> None:
         content_hash=HASH_B,
     )
     catalog.replace_content("d", [section], [chunk])
-    body = TestClient(app).get("/api/v1/documents/d/section/s").json()
+    body = TestClient(app, headers=HEADERS).get("/api/v1/documents/d/section/s").json()
     assert len(body["text"]) == 100 and body["truncated"] is True

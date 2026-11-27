@@ -76,7 +76,9 @@ def _parser() -> argparse.ArgumentParser:
         metavar="KEYWORD",
         help="retrieval keyword indexed with the document (repeatable)",
     )
-    ingest.add_argument("--index", action="store_true", help="index the documents after import")
+    ingest.add_argument(
+        "--index", action="store_true", help="index active documents; quarantine requires review"
+    )
     for name, help_text in (
         ("index", "index documents that have no index yet (all active ones by default)"),
         ("reindex", "rebuild the index of the given documents (all by default)"),
@@ -98,6 +100,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     release.add_argument("document", metavar="DOCUMENT_ID")
     release.add_argument("--config", type=Path, help=_CONFIG_HELP)
+    screen = commands.add_parser("screen", help="screen a quarantined document before review")
+    screen.add_argument("document", metavar="DOCUMENT_ID")
+    screen.add_argument("--config", type=Path, help=_CONFIG_HELP)
     audit = commands.add_parser("audit", help="print the document lifecycle audit trail")
     audit.add_argument("document", nargs="?", metavar="DOCUMENT_ID")
     audit.add_argument("--limit", type=int, default=100)
@@ -115,18 +120,28 @@ def _parser() -> argparse.ArgumentParser:
     sync.add_argument("--source", help="only synchronize this source of the manifest")
     sync.add_argument("--dry-run", action="store_true", help="list what would be downloaded")
     sync.add_argument("--limit", type=int, help="stop after this many downloads")
-    sync.add_argument("--index", action="store_true", help="index the imported documents")
+    sync.add_argument(
+        "--index", action="store_true", help="index active documents; quarantine requires review"
+    )
     sync.add_argument("--config", type=Path, help=_CONFIG_HELP)
     evaluation = commands.add_parser(
         "evaluate", help="measure retrieval quality (Recall@k, MRR) on a question file"
     )
     evaluation.add_argument("questions", type=Path, metavar="QUESTIONS_YAML")
-    evaluation.add_argument("--min-recall", type=float, help="exit 1 below this Recall@5 (0-1)")
+    evaluation.add_argument(
+        "--min-recall", type=_recall_threshold, help="exit 1 below this Recall@5 (0-1)"
+    )
     evaluation.add_argument(
         "--min-category-recall",
         type=_recall_threshold,
         metavar="THRESHOLD",
         help="exit 1 if any category's Recall@5 is below this threshold (0-1)",
+    )
+    evaluation.add_argument(
+        "--max-forbidden",
+        type=int,
+        metavar="COUNT",
+        help="exit 1 when more than COUNT questions return a forbidden passage in the top 5",
     )
     evaluation.add_argument("--verbose", action="store_true", help="list every question")
     evaluation.add_argument("--config", type=Path, help=_CONFIG_HELP)
@@ -212,6 +227,20 @@ def _release(args: argparse.Namespace) -> int:
     return 0
 
 
+def _screen(args: argparse.Namespace) -> int:
+    opened = _open(args.config)
+    if opened is None:
+        return 1
+    indexer = Indexer(*opened)
+    try:
+        rules = indexer.inspect(args.document)
+    except IndexingError as exc:
+        print(f"silicore-knowledge: {exc}", file=sys.stderr)
+        return 1
+    print(f"screened: {args.document} rules={','.join(rules) or 'none'}")
+    return 0
+
+
 def _audit(args: argparse.Namespace) -> int:
     opened = _open(args.config)
     if opened is None:
@@ -256,7 +285,10 @@ def _ingest(args: argparse.Namespace) -> int:
             failures += 1
             continue
         state = "imported" if result.created else "already present"
-        print(f"{state}: {result.document.document_id} ({path.name})")
+        print(
+            f"{state}: {result.document.document_id} ({path.name}) "
+            f"status={result.document.status.value}"
+        )
         imported.append(result.document.document_id)
     if args.index and imported:
         indexer = _indexer(settings, workspace, catalog)
@@ -336,29 +368,49 @@ def _sync(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
 
 
 def _evaluate(args: argparse.Namespace) -> int:
+    if args.max_forbidden is not None and args.max_forbidden < 0:
+        print("silicore-knowledge: --max-forbidden must be non-negative", file=sys.stderr)
+        return 2
     opened = _open(args.config)
     if opened is None:
         return 1
     settings, _, catalog = opened
     try:
         questions = load_questions(args.questions)
+        if args.max_forbidden is not None and not any(question.forbid for question in questions):
+            raise EvaluationError("--max-forbidden requires at least one forbidden criterion")
         components = build_vector_components(settings)
         concepts = load_concept_registry(settings)
     except (EvaluationError, EmbeddingError, VectorStoreError, ConceptError) as exc:
         print(f"silicore-knowledge: {exc}", file=sys.stderr)
         return 1
     embedder, store = components if components else (None, None)
-    report = evaluate(HybridSearcher(catalog, embedder, store, concepts=concepts), questions)
+    report = evaluate(
+        HybridSearcher(catalog, embedder, store, concepts=concepts),
+        questions,
+        min_score=settings.limits.min_score,
+    )
     for result in report.results:
-        if args.verbose or result.rank is None:
+        if args.verbose or result.rank is None or result.forbidden_ranks:
             rank = result.rank or "miss"
-            print(f"{result.question.id:<24} {result.question.category:<12} rank={rank}")
+            forbidden = ",".join(str(item) for item in result.forbidden_ranks) or "-"
+            print(
+                f"{result.question.id:<24} {result.question.category:<12} "
+                f"rank={rank} forbidden={forbidden}"
+            )
     for category in [None, *report.categories]:
         label = category or "all"
         recalls = " ".join(f"R@{k}={report.recall(k, category):.2f}" for k in report.ks)
         print(f"{label:<12} {recalls}")
     print(f"questions={len(report.results)} MRR={report.mrr:.3f}")
     failed = args.min_recall is not None and report.recall(5) < args.min_recall
+    print(f"forbidden@5={report.forbidden(5)}")
+    if args.max_forbidden is not None and report.forbidden(5) > args.max_forbidden:
+        print(
+            f"silicore-knowledge: forbidden@5={report.forbidden(5)} exceeds {args.max_forbidden}",
+            file=sys.stderr,
+        )
+        failed = True
     if args.min_category_recall is not None:
         if not report.categories:
             print("silicore-knowledge: no categories to evaluate", file=sys.stderr)
@@ -425,6 +477,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _delete(args)
     if args.command == "release":
         return _release(args)
+    if args.command == "screen":
+        return _screen(args)
     if args.command == "audit":
         return _audit(args)
     if args.command == "evaluate":
